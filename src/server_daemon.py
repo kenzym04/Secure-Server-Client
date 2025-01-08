@@ -72,7 +72,7 @@ PID_FILE = os.path.join(BASE_DIR, "server_daemon.pid")
 LOG_FILE = os.path.join(BASE_DIR, "logs", "server_daemon.log")
 
 # Global variables
-logger = None
+logger = logging.getLogger('ServerDaemon')
 connection_count: int = 0
 connection_lock: threading.Lock = threading.Lock()
 
@@ -90,7 +90,6 @@ def setup_logging() -> logging.Logger:
 
     The log directory is created if it doesn't exist.
     """
-    logger = logging.getLogger('ServerDaemon')
     logger.handlers.clear()  # Clear any existing handlers
     log_dir = os.path.dirname(LOG_FILE)
     os.makedirs(log_dir, exist_ok=True)
@@ -142,6 +141,37 @@ def daemonize() -> None:
         OSError: If fork operations fail.
         IOError: If writing to the PID file fails.
     """
+    global logger
+    if logger is None:
+        logger = setup_logging()
+
+    # Do first fork
+    try:
+        pid = os.fork()
+        if pid > 0:
+            # Exit first parent
+            sys.exit(0)
+    except OSError as e:
+        logger.error(f"Fork failed: {e.errno} ({e.strerror})")
+        sys.exit(1)
+
+    # Decouple from parent environment
+    os.chdir("/")
+    os.setsid()
+    os.umask(0)
+
+    # Do second fork
+    try:
+        pid = os.fork()
+        if pid > 0:
+            # Exit from second parent
+            sys.exit(0)
+    except OSError as e:
+        logger.error(f"Second fork failed: {e.errno} ({e.strerror})")
+        sys.exit(1)
+
+    # Write PID file
+    pid = os.getpid()
     try:
         pid = os.fork()
         if pid > 0:

@@ -14,6 +14,14 @@ This is a Python server application that handles client connections and responds
 - **Unlimited Concurrent Connections:** The server can handle an unlimited number of concurrent client connections.
 - **Efficient Caching:** Implements in-memory caching of file contents for fast query responses.
 
+## Code Quality
+This project uses static type checking with mypy to ensure type correctness. The latest validation result shows:
+
+````bash
+mypy src/
+````
+Success: no issues found in 4 source files
+
 ---
 ## Prerequisites
 - **Python**: 3.6+

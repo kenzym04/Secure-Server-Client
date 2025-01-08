@@ -1,30 +1,35 @@
 import configparser
-import signal
-import ssl
-import threading
-import sys
-import time
 import logging
-import socket
 import os
+import signal
+import socket
+import ssl
+import sys
+import threading
+import time
 from mmap import mmap as mmap_func
-from typing import Set, Dict, Any, Tuple
 from logging.handlers import RotatingFileHandler
+from typing import Set, Dict, Any, Tuple, Optional
+
+# Dynamic Path and Directory Configuration
+SCRIPT_DIR: str = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR: str = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+DEFAULT_CONFIG_DIR = os.getenv('CONFIG_DIR', os.path.join(BASE_DIR, "config"))
+DEFAULT_LOG_DIR = os.getenv('LOG_DIR', os.path.join(BASE_DIR, "logs"))
+DEFAULT_CERT_DIR = os.getenv('CERT_DIR', os.path.join(BASE_DIR, "certs"))
+DEFAULT_DATA_DIR = os.getenv('DATA_DIR', os.path.join(BASE_DIR, "data"))
+FILE_RELATIVE_PATH: str = os.getenv('FILE_PATH', os.path.join(DEFAULT_DATA_DIR, "200k.txt"))
+CONFIG_PATH: str = os.path.join(BASE_DIR, "config", "config.ini")
+PID_FILE: str = os.getenv('PID_FILE', os.path.join(DEFAULT_CONFIG_DIR, "server_daemon.pid"))
+LOG_FILE: str = os.path.join(BASE_DIR, "logs", "server.log")
+
+logger = logging.getLogger('Server')
 
 # Locks
 connection_lock: threading.Lock = threading.Lock()
 file_lock: threading.Lock = threading.Lock()
 connection_count_lock = threading.Lock()
 connection_count = 0
-
-# Directory and file paths
-SCRIPT_DIR: str = os.path.dirname(os.path.abspath(__file__))
-BASE_DIR: str = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
-FILE_RELATIVE_PATH: str = os.path.join(BASE_DIR, "200k.txt")
-CONFIG_PATH: str = os.path.join(BASE_DIR, "config", "config.ini")
-PID_FILE: str = os.path.join(BASE_DIR, "server_daemon.pid")
-LOG_FILE: str = os.path.join(BASE_DIR, "logs", "server.log")
-SQLITE_DB_PATH: str = os.path.join(BASE_DIR, "search_index.db")
 
 # File size and log constraints
 MAX_PAYLOAD_SIZE: int = 1024
@@ -57,7 +62,7 @@ class TokenBucket:
         Args:
             capacity (int): The maximum number of tokens the bucket can hold.
             fill_rate (float): The rate at which tokens are added to the
-            bucket (tokens per second).
+                               bucket (tokens per second).
         """
         self.capacity: int = capacity
         self.fill_rate: float = fill_rate
@@ -91,19 +96,17 @@ class TokenBucket:
 
 TOKEN_BUCKET = TokenBucket(capacity=100, fill_rate=10)  # 100 tokens, refills at 10 tokens/sec
 
-logger = logging.getLogger('Server')
-
-def setup_logging() -> logging.Logger:
+def setup_logging() -> None:
     """
     Set up and configure the logger for the server.
 
     Returns:
         logging.Logger: Configured logger instance.
     """
+    global logger
     log_file = os.path.join(BASE_DIR, 'logs', 'server.log')
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
 
-    logger = logging.getLogger('Server')
     logger.setLevel(logging.DEBUG)
 
     formatter = logging.Formatter(
@@ -126,8 +129,6 @@ def setup_logging() -> logging.Logger:
 
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
-
-    return logger
 
 def load_config(config_path: str) -> configparser.ConfigParser:
     """
@@ -152,9 +153,10 @@ def load_and_validate_config() -> Dict[str, Any]:
 
     Raises:
         FileNotFoundError: If SSL certificates or specified file path are not found.
+        ValueError: If configuration values are invalid.
     """
     config = load_config(CONFIG_PATH)
-    server_config = {
+    server_config: Dict[str, Any] = {
         'host': config.get('server', 'host', fallback='127.0.0.1'),
         'port': config.getint('server', 'port', fallback=44444),
         'ssl': config.getboolean('server', 'ssl', fallback=False),
@@ -167,10 +169,10 @@ def load_and_validate_config() -> Dict[str, Any]:
             'key_file',
             fallback='certs/server.key'
         ),
-        'linuxpath': config.get(
+        'linuxpath': str(config.get(
             'server', 'linuxpath',
             fallback=FILE_RELATIVE_PATH
-        ),
+        )),
         'reread_on_query': config.getboolean(
             'server',
             'reread_on_query',
@@ -184,8 +186,40 @@ def load_and_validate_config() -> Dict[str, Any]:
             'server', 'token_bucket_fill_rate',
             fallback=10.0
         ),
+        'file_path': config.get('server', 'file_path', fallback=FILE_RELATIVE_PATH),
+        'log_file': config.get('server', 'log_file', fallback=LOG_FILE),
+        'pid_file': config.get('server', 'pid_file', fallback=PID_FILE),
     }
 
+    # Type checking
+    if not isinstance(server_config['port'], int):
+        raise TypeError("Port must be an integer")
+    if not isinstance(server_config['file_path'], str):
+        raise TypeError("File path must be a string")
+    if not isinstance(server_config['log_file'], str):
+        raise TypeError("Log file path must be a string")
+    if not isinstance(server_config['linuxpath'], str):
+        raise TypeError("Linux path must be a string")
+    if not isinstance(server_config['token_bucket_capacity'], int):
+        raise TypeError("Token bucket capacity must be an integer")
+    if not isinstance(server_config['token_bucket_fill_rate'], float):
+        raise TypeError("Token bucket fill rate must be a float")
+
+    # Validate token bucket parameters
+    if server_config['token_bucket_capacity'] <= 0:
+        raise ValueError("Token bucket capacity must be positive")
+    if server_config['token_bucket_fill_rate'] <= 0:
+        raise ValueError("Token bucket fill rate must be positive")
+
+    # Validate host
+    if not server_config['host']:
+        raise ValueError("Host cannot be empty")
+
+    # Validate port
+    if not 1 <= server_config['port'] <= 65535:
+        raise ValueError(f"Invalid port number: {server_config['port']}")
+
+    # Validate SSL configuration
     if server_config['ssl']:
         cert_path = os.path.join(BASE_DIR, server_config['cert_file'])
         key_path = os.path.join(BASE_DIR, server_config['key_file'])
@@ -194,14 +228,21 @@ def load_and_validate_config() -> Dict[str, Any]:
                 f"SSL certificate or key file not found. "
                 f"Cert path: {cert_path}, Key path: {key_path}")
 
+    # Validate linuxpath
     if not os.path.exists(server_config['linuxpath']):
         raise FileNotFoundError(
             f"File not found: {server_config['linuxpath']}"
         )
 
+    # Validate token bucket parameters
+    if server_config['token_bucket_capacity'] <= 0:
+        raise ValueError("Token bucket capacity must be positive")
+    if server_config['token_bucket_fill_rate'] <= 0:
+        raise ValueError("Token bucket fill rate must be positive")
+
     return server_config
 
-config = load_and_validate_config()
+config: Dict[str, Any] = load_and_validate_config()
 
 def get_client_bucket(ip: str) -> TokenBucket:
     """
@@ -231,10 +272,16 @@ def optimized_read_file(query: str) -> bool:
         bool: True if the query is found in the file, False otherwise.
     """
     global file_set, file_mmap
-    with open(config['linuxpath'], 'r') as f:
-        return query in f.read().splitlines()
+    try:
+        # Ensure linuxpath is a string
+        file_path = str(config['linuxpath'])
+        with open(file_path, 'r') as f:
+            return query in f.read().splitlines()
+    except Exception as e:
+        logger.error(f"Error in optimized_read_file: {str(e)}")
+        return False
 
-def initialize_set_mmap():
+def initialize_set_mmap() -> None:
     """
     Initialize global file_set and file_mmap for efficient file content access.
 
@@ -256,6 +303,10 @@ def initialize_set_mmap():
     """
     global file_set, file_mmap
     try:
+        linuxpath = config['linuxpath']
+        if not isinstance(linuxpath, str):
+            raise TypeError("linuxpath must be a string")
+
         with open(config['linuxpath'], 'r+b') as f:
             file_mmap = mmap_func(f.fileno(), 0)
             # Convert mmap object to bytes, then decode to string
@@ -269,18 +320,15 @@ def initialize_set_mmap():
 
 def search_query(query: str) -> str:
     """
-    Search for the query in the file or cached data structures.
+    Search for an exact match of the query in the file or cached data structures.
 
     Args:
         query (str): The string to search for.
 
     Returns:
-        Tuple[str, float]: A tuple containing the result string
-        and the execution time in milliseconds.
+        str: A string indicating whether the exact query was found or not.
     """
     global file_set, file_mmap
-
-    start_time = time.perf_counter_ns()
 
     if config['reread_on_query']:
         try:
@@ -311,14 +359,29 @@ def search_query(query: str) -> str:
 cleanup_lock = threading.Lock()
 cleanup_done = False
 
-def cleanup_resources():
+def cleanup_resources() -> None:
     """
     Clean up global resources used by the server.
 
-    This function closes the memory-mapped file if it exists and resets the file set.
+    This function performs the following cleanup tasks:
+    - Closes the memory-mapped file if it exists
+    - Resets the file set
+    - Clears the client token buckets
+    - Releases any other resources that need cleanup
+
     It uses a lock to ensure thread-safety and a flag to prevent multiple cleanups.
+
+    Global variables affected:
+        file_mmap (mmap.mmap): Memory-mapped file object
+        file_set (Set[str]): Set containing file contents
+        cleanup_done (bool): Flag to track if cleanup has been performed
+        client_token_buckets (Dict): Dictionary of client token buckets
+
+    Note:
+        This function should be called before server shutdown or when resources
+        need to be freed.
     """
-    global file_mmap, file_set, cleanup_done
+    global file_mmap, file_set, cleanup_done, client_token_buckets
 
     with cleanup_lock:
         if cleanup_done:
@@ -334,6 +397,7 @@ def cleanup_resources():
                 file_mmap = None
 
         file_set = None
+        client_token_buckets.clear()
 
         cleanup_done = True
         logger.info("Resources cleaned up successfully.")
@@ -364,29 +428,35 @@ def handle_client(
 
     try:
         while True:
-            start_time = time.perf_counter_ns()
-            query = client_socket.recv(MAX_PAYLOAD_SIZE).decode('utf-8').strip()
-            if not query:
+            try:
+                start_time = time.perf_counter_ns()
+                query = client_socket.recv(MAX_PAYLOAD_SIZE).decode('utf-8').strip()
+                if not query:
+                    break
+                # check for rate limiting
+                if not TOKEN_BUCKET.consume(1):
+                    client_socket.sendall("RATE_LIMITED\n".encode('utf-8'))
+                    continue
+
+                result = search_query(query)
+                end_time = time.perf_counter_ns()
+
+                response = f"{result}\n"
+                client_socket.sendall(response.encode('utf-8'))
+
+                round_trip_time = (end_time - start_time) / 1_000_000  # Convert ns to ms
+
+                logger.debug(
+                    f"Query: '{query}', "
+                    f"IP: {client_address[0]}:{client_address[1]}, "
+                    f"Server Round-trip Execution Time: {round_trip_time:.6f} ms"
+                )
+            except socket.error as e:
+                logger.error(f"Socket error while receiving data: {str(e)}")
                 break
-            # check for rate limiting
-            if not TOKEN_BUCKET.consume(1):
-                client_socket.sendall("RATE_LIMITED\n".encode('utf-8'))
+            except UnicodeDecodeError as e:
+                logger.error(f"Error decoding received data: {str(e)}")
                 continue
-                
-            result = search_query(query)
-            execution_time = (time.perf_counter_ns() - start_time) / 1_000_000  # Convert ns to ms
-            response = f"{result}\n"
-            client_socket.sendall(response.encode('utf-8'))
-            end_time = time.perf_counter_ns()
-
-            round_trip_time = (end_time - start_time) / 1_000_000  # Convert ns to ms
-            logger.debug(
-                f"Query: '{query}', "
-                f"IP: {client_address[0]}:{client_address[1]}, "
-                f"Result: '{result}', Execution-Time: {execution_time:.6f} ms, "
-                f"Round-trip: {round_trip_time:.6f} ms"
-            )
-
     except Exception as e:
         logger.error(f"Error handling client {client_address}: {str(e)}")
     finally:
@@ -398,7 +468,7 @@ def handle_client(
             f"{client_address[0]}:{client_address[1]} closed. "
             f"Total connections: {connection_count}")
 
-def start_server(daemon_logger=None) -> None:
+def start_server(daemon_logger: Optional[logging.Logger] = None) -> None:
     """
     Initialize and run the server, handling client connections.
 
@@ -419,7 +489,7 @@ def start_server(daemon_logger=None) -> None:
     if daemon_logger:
         logger = daemon_logger
     else:
-        logger = setup_logging()
+        setup_logging()
 
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
@@ -428,6 +498,8 @@ def start_server(daemon_logger=None) -> None:
                                         config['port'], config['ssl']
                                         )
     logger.info(f"Server started on {config['host']}:{config['port']}")
+    logger.info(f"Using file: {config['linuxpath']}")
+    logger.info(f"Reread on query: {config['reread_on_query']}")
 
     try:
         while True:
@@ -445,15 +517,11 @@ def start_server(daemon_logger=None) -> None:
         logger.info("Server shutting down.")
 
 def create_ssl_context() -> ssl.SSLContext:
-    """
-    Create and configure an SSL context for secure server connections.
+    cert_file = os.getenv('SSL_CERT_FILE', os.path.join(DEFAULT_CERT_DIR, "server.crt"))
+    key_file = os.getenv('SSL_KEY_FILE', os.path.join(DEFAULT_CERT_DIR, "server.key"))
 
-    Returns:
-        ssl.SSLContext: Configured SSL context with loaded certificate chain.
-    """
     context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-    context.load_cert_chain(certfile=os.path.join(BASE_DIR, config['cert_file']),
-                            keyfile=os.path.join(BASE_DIR, config['key_file']))
+    context.load_cert_chain(certfile=cert_file, keyfile=key_file)
     return context
 
 def setup_server_socket(ip: str, port: int, use_ssl: bool) -> socket.socket:
@@ -483,8 +551,9 @@ def signal_handler(signum: int, _: Any) -> None:
     """
     Handle termination signals gracefully.
     """
-    logger.info("Received signal to terminate. Shutting down...")
+    logger.info(f"Received signal {signum} to terminate. Shutting down...")
     cleanup_resources()
+    logger.info("Server shutdown complete.")
     sys.exit(0)
 
 def stop_daemon() -> None:
@@ -492,6 +561,7 @@ def stop_daemon() -> None:
     Stop the daemon process.
     """
     try:
+        pid_file = str(PID_FILE)
         with open(PID_FILE, 'r') as f:
             pid = int(f.read().strip())
         os.kill(pid, signal.SIGTERM)
@@ -500,6 +570,8 @@ def stop_daemon() -> None:
         logger.error("PID file not found. Is the daemon running?")
     except ProcessLookupError:
         logger.error(f"No process found with PID {pid}")
+    except ValueError:
+        logger.error(f"Invalid PID in file {pid_file}")
     except Exception as e:
         logger.error(f"Error stopping daemon: {str(e)}")
 

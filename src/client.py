@@ -24,11 +24,16 @@ from logging.handlers import RotatingFileHandler
 
 # Constants
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_PATH = os.path.join(os.path.dirname(SCRIPT_DIR), "config", "config.ini")
-LOG_FILE = os.path.join(os.path.dirname(
-    os.path.dirname(os.path.abspath(__file__))),
-    "logs", "client.log"
-)
+BASE_DIR = os.path.dirname(SCRIPT_DIR)
+
+DEFAULT_CONFIG_DIR = os.path.join(BASE_DIR, "config")
+CONFIG_PATH = os.getenv('CONFIG_PATH', os.path.join(DEFAULT_CONFIG_DIR, "config.ini"))
+
+DEFAULT_LOG_DIR = os.path.join(BASE_DIR, "logs")
+LOG_FILE = os.getenv('LOG_FILE', os.path.join(DEFAULT_LOG_DIR, "client.log"))
+
+os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
+os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 
 def setup_logging() -> logging.Logger:
     """
@@ -271,7 +276,7 @@ def log_failed_query(search_input: str, start_time: float) -> None:
         f"Time Taken: {round_trip_time:.2f} ms"
     )
 
-def main():
+def main() -> None:
     """
     Main function to run test queries.
     """

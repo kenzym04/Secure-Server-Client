@@ -1,26 +1,19 @@
-from datetime import time
-
+import time
 import pytest
 import os
 import sys
 import socket
 import configparser
-import threading
-import unittest
-import signal
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import patch, MagicMock
 
 # Add the src directory to the Python path for importing the client module
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from src.server import start_server, stop_daemon, signal_handler
+from src.server import config, search_query
 
 # Add the parent directory to the Python path for importing the server module
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-# Import the TokenBucket module to be tested
-from src.server import TokenBucket
-# Import the server module to be tested
 from src import server
-from src.server import handle_client
+
 
 
 @pytest.fixture
@@ -54,7 +47,6 @@ def mock_logger():
 
 
 # Rate-limiting tests
-
 def test_token_bucket_initialization():
     """
     Test TokenBucket initialization to ensure capacity and fill rate are set correctly.
@@ -137,6 +129,18 @@ def test_setup_server_socket():
 
             assert result == mock_context.wrap_socket.return_value
 
+    def test_search_query_performance():
+        start_time = time.perf_counter()
+        result = search_query("test_query")
+        end_time = time.perf_counter()
+
+        execution_time = end_time - start_time
+
+        if config['reread_on_query']:
+            assert execution_time <= 0.04, f"Execution time ({execution_time:.4f}s) exceeds 40ms limit for REREAD_ON_QUERY=True"
+        else:
+            assert execution_time <= 0.0005, f"Execution time ({execution_time:.4f}s) exceeds 0.5ms limit for REREAD_ON_QUERY=False"
+            print()
 
 if __name__ == '__main__':
     pytest.main()

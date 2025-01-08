@@ -215,13 +215,28 @@ class TestServer(unittest.TestCase):
         sys.stdout.flush()
 
     def test_ssl_connection(self):
-        if self.config['ssl']:
-            response = self.send_query("test")
-            self.assertIn(response, ["STRING EXISTS", "STRING NOT FOUND"])
-            sys.stdout.write(f"SSL Connection Test: {response}\n")
-        else:
+        if not self.config['ssl']:
             self.skipTest("SSL is not enabled in the configuration")
-        sys.stdout.flush()
+
+        try:
+            context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+
+            with socket.create_connection((self.config['host'], self.config['port'])) as sock:
+                with context.wrap_socket(sock, server_hostname=self.config['host']) as secure_sock:
+                    query = "test"
+                    secure_sock.sendall(query.encode('utf-8'))
+                    response = secure_sock.recv(1024).decode('utf-8')
+
+            self.assertIn(response.strip(), ["STRING EXISTS", "STRING NOT FOUND"])
+            sys.stdout.write(f"SSL Connection Test: {response.strip()}\n")
+        except ssl.SSLError as e:
+            self.fail(f"SSL connection failed: {str(e)}")
+        except Exception as e:
+            self.fail(f"Unexpected error during SSL connection: {str(e)}")
+        finally:
+            sys.stdout.flush()
 
     def test_query_time_measurement(self):
         start_time = time.time()
@@ -277,7 +292,7 @@ class TestServer(unittest.TestCase):
 
             # Log or assert the results
             execution_time = end_time - start_time
-            self.logger.info(f"File size: {size}, Execution time: {execution_time:.2f} seconds")
+            self.logger.info(f"File size: {size}, Client Round-trip Execution time: {execution_time:.2f} seconds")
 
 class PerformanceTest:
     def __init__(self, reread_on_query=True):
