@@ -6,7 +6,7 @@ import logging
 
 # Add the parent directory to sys.path to allow importing from src
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from src.server import search_query, config
+from src.server import search_query, config, initialize_set_mmap
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +24,8 @@ def test_performance(reread_on_query):
     for size in file_sizes:
         total_time = 0
         for _ in range(queries_per_size):
-            query = f"test_query_{_}"  # Generate a unique query
-            _, execution_time = search_query(query)
+            # query = f"test_query_{_}"  # Generate a unique query
+            _, execution_time = search_query("test_string")
             total_time += execution_time
 
         avg_time = total_time / queries_per_size

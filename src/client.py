@@ -1,17 +1,18 @@
 """
-Client Module for Interacting with Search Server
+Client Module for Server Interaction
 
-This module implements a client that connects to a server, sends search queries,
-and processes responses. It includes features such as:
+This module defines a client for connecting to a server, sending search queries,
+and handling responses. It includes the following features:
 
-1. SSL/TLS support for secure communications
-2. Configurable settings via external configuration
-3. Logging of queries, responses, and execution times
-4. Error handling and reporting
+1. SSL/TLS support for secure communications.
+2. Configurable settings via an external configuration file.
+3. Logging of query execution and responses.
+4. Comprehensive error handling and reporting.
 
-The client supports both SSL and non-SSL connections, handles various network
-errors, and provides detailed logging for debugging and performance analysis.
+Supports both SSL and non-SSL connections, detailed logging for performance analysis,
+and robust error handling.
 """
+
 import os
 import sys
 import time
@@ -37,10 +38,10 @@ os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 
 def setup_logging() -> logging.Logger:
     """
-    Set up and configure logging for the client.
+    Configure logging for the client.
 
     Returns:
-        logging.Logger: Configured logger object.
+        logging.Logger: A logger instance configured for file and console output.
     """
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)

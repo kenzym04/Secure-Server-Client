@@ -1,36 +1,34 @@
 """
-Server Daemon Module
+Daemon Module for Running Server
 
-This module provides functionality to run the server as a daemon process in a
-Unix-like environment. It encapsulates the complexities of daemon management,
-including process forking, signal handling, logging, and server lifecycle
-management.
+This module provides functionalities to run the server as a daemon process.
+Key features include:
 
-Key Features:
-- Daemonization: Forks the process to run in the background, detached from the
-  terminal.
-- Logging: Configures rotating log files for persistent logging of daemon
-  activities.
-- Signal Handling: Manages graceful shutdown on receiving termination signals.
-- Server Management: Handles starting, stopping, and running the server process.
-- Rate Limiting: Implements request rate limiting inherited from the main server
-  module.
-
-Main Components:
-- setup_logging: Configures the logging system for the daemon.
-- signal_handler: Manages termination signals for graceful shutdown.
-- daemonize: Performs the process of turning the current process into a daemon.
-- run_daemon: Executes the main server logic in daemon mode.
-- handle_request: Processes individual client requests with rate limiting.
-- main: Entry point for starting or stopping the daemon based on command-line
-  arguments.
+- Daemonization: Detach the process from the terminal to run in the background.
+- Logging: Configures rotating log files for capturing daemon activities.
+- Signal Handling: Ensures graceful shutdown on termination signals.
+- Server Lifecycle: Manages starting, stopping, and running the server.
+- Rate Limiting: Inherits request rate limiting from the main server module.
 
 Usage:
-    To start the daemon: python server_daemon.py --daemon
-    To stop the daemon:  python server_daemon.py stop
+    Start daemon: python server_daemon.py --daemon
+    Stop daemon:  python server_daemon.py stop
+"""
+"""
+Daemon Module for Running Server
 
-Note: This module is designed to work in conjunction with the main server module,
-inheriting core server functionality while adding daemon-specific features.
+This module provides functionalities to run the server as a daemon process.
+Key features include:
+
+- Daemonization: Detach the process from the terminal to run in the background.
+- Logging: Configures rotating log files for capturing daemon activities.
+- Signal Handling: Ensures graceful shutdown on termination signals.
+- Server Lifecycle: Manages starting, stopping, and running the server.
+- Rate Limiting: Inherits request rate limiting from the main server module.
+
+Usage:
+    Start daemon: python server_daemon.py --daemon
+    Stop daemon:  python server_daemon.py stop
 """
 
 import os
@@ -77,18 +75,15 @@ connection_count: int = 0
 connection_lock: threading.Lock = threading.Lock()
 
 def setup_logging() -> logging.Logger:
-    """Set up logging for the server daemon with file and console handlers.
+    """
+    Configure logging for the server daemon.
 
     Returns:
-        logging.Logger: Configured logger object for use throughout the application.
+        logging.Logger: Logger configured for file and console logging.
 
-    This function configures a logger named 'ServerDaemon' with the following:
-    - A rotating file handler (max size 10MB, 5 backups) logging to LOG_FILE.
-    - A console handler for immediate output during development or debugging.
-    - Logging level set to DEBUG for comprehensive logging.
-    - A formatter including timestamp, logger name, log level, and message.
-
-    The log directory is created if it doesn't exist.
+    This includes:
+    - Rotating file handler with a maximum size and backups.
+    - Console handler for immediate logging during development.
     """
     logger.handlers.clear()  # Clear any existing handlers
     log_dir = os.path.dirname(LOG_FILE)
