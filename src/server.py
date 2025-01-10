@@ -79,6 +79,37 @@ client_token_buckets: Dict[str, 'TokenBucket'] = {}
 file_set = None
 file_mmap = None
 
+def validate_environment():
+    """
+    Validate the existence of critical directories required for the server.
+
+    This function checks the presence of directories and files needed for
+    the server's operation. If any path is missing, it logs a warning with
+    the corresponding description.
+
+    Paths validated:
+        - Configuration directory
+        - Log directory
+        - Certificate directory
+        - Data directory
+        - PID file directory
+
+    Logging:
+        Logs a warning for each missing path.
+
+    Returns:
+        None
+    """
+    for path, description in [
+        (DEFAULT_CONFIG_DIR, "Configuration directory"),
+        (DEFAULT_LOG_DIR, "Log directory"),
+        (DEFAULT_CERT_DIR, "Certificate directory"),
+        (DEFAULT_DATA_DIR, "Data directory"),
+        (os.path.dirname(PID_FILE), "PID file directory"),
+    ]:
+        if not os.path.exists(path):
+            logger.warning(f"{description} does not exist: {path}")
+
 class TokenBucket:
     """
     Implements a token bucket algorithm to control the rate of requests.
@@ -136,8 +167,8 @@ def setup_logging() -> None:
     Logs are written to a predefined log file with DEBUG level by default.
     """
     global logger
-    log_file = os.path.join(BASE_DIR, 'logs', 'server.log')
-    os.makedirs(os.path.dirname(log_file), exist_ok=True)
+
+    os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 
     logger.setLevel(logging.DEBUG)
 
@@ -147,7 +178,7 @@ def setup_logging() -> None:
 
     # File handler
     file_handler = RotatingFileHandler(
-        log_file,
+        LOG_FILE,
         maxBytes=MAX_LOG_SIZE,
         backupCount=MAX_LOG_BACKUPS
     )
@@ -161,6 +192,9 @@ def setup_logging() -> None:
 
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
+    logger.debug(f"Using LOG_FILE: {LOG_FILE}")
+    logger.debug(f"Using PID_FILE: {PID_FILE}")
+
 
 def load_config(config_path: str) -> configparser.ConfigParser:
     """
@@ -187,7 +221,9 @@ def load_and_validate_config() -> Dict[str, Any]:
         FileNotFoundError: If SSL certificates or specified file path are not found.
         ValueError: If configuration values are invalid.
     """
+
     config = load_config(CONFIG_PATH)
+
     server_config: Dict[str, Any] = {
         'host': config.get('server', 'host', fallback='127.0.0.1'),
         'port': config.getint('server', 'port', fallback=44444),
@@ -253,8 +289,8 @@ def load_and_validate_config() -> Dict[str, Any]:
 
     # Validate SSL configuration
     if server_config['ssl']:
-        cert_path = os.path.join(BASE_DIR, server_config['cert_file'])
-        key_path = os.path.join(BASE_DIR, server_config['key_file'])
+        cert_path = os.path.join(DEFAULT_CERT_DIR, server_config['cert_file'])
+        key_path = os.path.join(DEFAULT_CERT_DIR, server_config['key_file'])
         if not (os.path.exists(cert_path) and os.path.exists(key_path)):
             raise FileNotFoundError(
                 f"SSL certificate or key file not found. "
@@ -396,7 +432,7 @@ def search_query(query: str) -> str:
 
     execution_time_ms = (end_time - start_time) / 1_000_000  # Convert ns to ms
 
-    logger.info(f"Search query: {query} - {result} (Server Execution Time: {execution_time_ms:.2f} ms)")
+    logger.info(f"Search query: {query} - {result} Server Execution Time: {execution_time_ms:.2f} ms")
 
     return result
 

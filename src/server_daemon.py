@@ -37,9 +37,9 @@ import sys
 import signal
 import time
 import logging
-from logging.handlers import RotatingFileHandler
 import threading
 from typing import Any, NoReturn
+from logging.handlers import RotatingFileHandler
 
 # Add the project root directory to the Python path
 project_root = os.path.abspath(
@@ -64,15 +64,33 @@ except ImportError:
                             )
 
 # Constants
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-BASE_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
-PID_FILE = os.path.join(BASE_DIR, "server_daemon.pid")
-LOG_FILE = os.path.join(BASE_DIR, "logs", "server_daemon.log")
+SCRIPT_DIR: str = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR: str = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 
 # Global variables
-logger = logging.getLogger('ServerDaemon')
+logger = logging.getLogger('Server Daemon')
 connection_count: int = 0
 connection_lock: threading.Lock = threading.Lock()
+
+# Dynamic Path Configuration
+DEFAULT_CONFIG_DIR = os.getenv('CONFIG_DIR', os.path.join(BASE_DIR, "config"))
+DEFAULT_LOG_DIR = os.getenv('LOG_DIR', os.path.join(BASE_DIR, "logs"))
+DEFAULT_PID_DIR = os.getenv('PID_DIR', BASE_DIR)
+SERVER_HOST = os.getenv('SERVER_HOST', '127.0.0.1')
+SERVER_PORT = int(os.getenv('SERVER_PORT', 44444))
+
+# Paths
+PID_FILE: str = os.getenv('PID_FILE', os.path.join(DEFAULT_PID_DIR, "server_daemon.pid"))
+LOG_FILE: str = os.getenv('LOG_FILE', os.path.join(DEFAULT_LOG_DIR, "server_daemon.log"))
+
+def validate_environment():
+    for path, description in [
+        (DEFAULT_CONFIG_DIR, "Configuration directory"),
+        (DEFAULT_LOG_DIR, "Log directory"),
+        (DEFAULT_PID_DIR, "PID directory"),
+    ]:
+        if not os.path.exists(path):
+            logger.warning(f"{description} does not exist: {path}")
 
 def setup_logging() -> logging.Logger:
     """
@@ -86,6 +104,8 @@ def setup_logging() -> logging.Logger:
     - Console handler for immediate logging during development.
     """
     logger.handlers.clear()  # Clear any existing handlers
+
+    # Ensure the directory for the log file exists
     log_dir = os.path.dirname(LOG_FILE)
     os.makedirs(log_dir, exist_ok=True)
 
@@ -103,6 +123,8 @@ def setup_logging() -> logging.Logger:
     logger.setLevel(logging.DEBUG)
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
+    logger.debug(f"Using LOG_FILE: {LOG_FILE}")
+    logger.debug(f"Using PID_FILE: {PID_FILE}")
 
     return logger
 
@@ -151,33 +173,7 @@ def daemonize() -> None:
         sys.exit(1)
 
     # Decouple from parent environment
-    os.chdir("/")
-    os.setsid()
-    os.umask(0)
-
-    # Do second fork
-    try:
-        pid = os.fork()
-        if pid > 0:
-            # Exit from second parent
-            sys.exit(0)
-    except OSError as e:
-        logger.error(f"Second fork failed: {e.errno} ({e.strerror})")
-        sys.exit(1)
-
-    # Write PID file
-    pid = os.getpid()
-    try:
-        pid = os.fork()
-        if pid > 0:
-            # Exit first parent
-            sys.exit(0)
-    except OSError as e:
-        logger.error(f"Fork failed: {e.errno} ({e.strerror})")
-        sys.exit(1)
-
-    # Decouple from parent environment
-    os.chdir("/")
+    os.chdir(BASE_DIR)
     os.setsid()
     os.umask(0)
 
@@ -305,7 +301,7 @@ def main() -> None:
         try:
             # Try to bind to the port to check if it's already in use
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind(('127.0.0.1', 44444))  # Use the same port as in your server configuration
+                s.bind((SERVER_HOST, SERVER_PORT))  # Use the same port as in your server configuration
         except socket.error as e:
             if e.errno == 98:  # Address already in use
                 print("Error: Server daemon is already running...")

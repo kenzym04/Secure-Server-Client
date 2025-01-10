@@ -23,18 +23,54 @@ import configparser
 from typing import Tuple, Optional
 from logging.handlers import RotatingFileHandler
 
-# Constants
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-BASE_DIR = os.path.dirname(SCRIPT_DIR)
+# Initialize configuration parser
+config = configparser.ConfigParser()
 
-DEFAULT_CONFIG_DIR = os.path.join(BASE_DIR, "config")
+# Define dynamic paths
+SCRIPT_DIR: str = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR: str = os.path.dirname(SCRIPT_DIR)
+DEFAULT_LOG_DIR = os.getenv('LOG_DIR', os.path.join(BASE_DIR, "logs"))
+DEFAULT_CONFIG_DIR = os.getenv('CONFIG_PATH', os.path.join(BASE_DIR, "config"))
+DEFAULT_DATA_DIR = os.getenv('DATA_DIR', os.path.join(BASE_DIR, "data"))
+
+# Configuration file path
 CONFIG_PATH = os.getenv('CONFIG_PATH', os.path.join(DEFAULT_CONFIG_DIR, "config.ini"))
+if not os.path.exists(CONFIG_PATH):
+    raise FileNotFoundError(f"Configuration file not found: {CONFIG_PATH}")
 
-DEFAULT_LOG_DIR = os.path.join(BASE_DIR, "logs")
+config.read(CONFIG_PATH)
+
+# Log file path
 LOG_FILE = os.getenv('LOG_FILE', os.path.join(DEFAULT_LOG_DIR, "client.log"))
 
-os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
-os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+# Data file path
+linuxpath = os.getenv('LINUX_PATH', config.get('server', 'linuxpath', fallback=os.path.join(DEFAULT_DATA_DIR, "200k.txt")))
+
+# PID file path
+PID_FILE = os.getenv('PID_FILE', os.path.join(BASE_DIR, "server_daemon.pid"))
+
+# Ensure required directories exist
+os.makedirs(DEFAULT_LOG_DIR, exist_ok=True)
+os.makedirs(DEFAULT_CONFIG_DIR, exist_ok=True)
+os.makedirs(DEFAULT_DATA_DIR, exist_ok=True)
+
+def validate_environment():
+    """
+    Validate the existence of critical directories required for the client.
+
+    Logs a warning for any missing paths.
+
+    Returns:
+        None
+    """
+    for path, description in [
+        (DEFAULT_CONFIG_DIR, "Configuration file"),
+        (DEFAULT_LOG_DIR, "Log directory"),
+        (DEFAULT_DATA_DIR, "Data directory"),
+        (os.path.dirname(PID_FILE), "PID file directory"),
+    ]:
+        if not os.path.exists(path):
+            logger.warning(f"{description} does not exist: {path}")
 
 def setup_logging() -> logging.Logger:
     """
