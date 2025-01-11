@@ -184,11 +184,15 @@ def setup_logging() -> None:
     )
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)
+    if not hasattr(file_handler, "filters"):
+        file_handler.filters = []  # Ensure compatibility with custom setups
 
     # Console handler
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(formatter)
+    if not hasattr(console_handler, "filters"):
+        console_handler.filters = []  # Ensure compatibility with custom setups
 
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)

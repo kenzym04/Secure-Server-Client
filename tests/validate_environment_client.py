@@ -3,7 +3,8 @@ import unittest
 from unittest.mock import patch, MagicMock
 import sys
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
+# Add the src directory to the Python path for importing the client module
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.client import DEFAULT_CONFIG_DIR, DEFAULT_LOG_DIR, DEFAULT_DATA_DIR, PID_FILE, validate_environment
 
