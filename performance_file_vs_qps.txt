@@ -1,0 +1,68 @@
+tests/test_file_sizes_rows_vs_qps.py
+
+Maximum QPS achieved for file size 10000: 19530.44
+
+Maximum QPS achieved for file size 100000: 19520.72
+
+
+Maximum QPS achieved for file size 250000: 19779.54
+
+
+Maximum QPS achieved for file size 500000: 19432.92
+
+Testing file size: 1000000000 lines
+
+tests/test_file_sizes_bytes_vs_qps_mocked.py
+Testing file size: 1000 bytes
+  Progress: 1000/1000 queries
+  Maximum QPS achieved: 1000000.00
+
+Testing file size: 10000 bytes
+  Progress: 1000/1000 queries
+  Maximum QPS achieved: 1000000.00
+
+Testing file size: 100000 bytes
+  Progress: 1000/1000 queries
+  Maximum QPS achieved: 1000000.00
+
+Testing file size: 1000000 bytes
+  Progress: 1000/1000 queries
+  Maximum QPS achieved: 1000000.00
+
+Testing file size: 1000000000 bytes
+  Progress: 100/1000 queries
+
+
+tests/file_sizes_vs_speed_test.py Server started for testing.
+
+Testing file size: 10000 lines
+Maximum QPS achieved for file size 10000: 19766.79
+
+Testing file size: 100000 lines
+Maximum QPS achieved for file size 100000: 19987.12
+
+Testing file size: 250000 lines
+Maximum QPS achieved for file size 250000: 19922.81
+
+Testing file size: 500000 lines
+Maximum QPS achieved for file size 500000: 20073.32
+
+Testing file size: 1000000 lines
+Maximum QPS achieved for file size 1000000: 20129.73
+
+Testing file size: 10000000 lines
+Maximum QPS achieved for file size 10000000: 20075.83
+
+Testing file size: 100000000 lines
+Maximum QPS achieved for file size 100000000: 19946.00
+
+Testing file size: 500000000 lines
+Server unable to handle more than 4 queries per second for file size 500000000.
+Maximum QPS achieved for file size 500000000: 3862.16
+
+Testing file size: 1000000000 lines
+Server unable to handle more than 4 queries per second for file size 1000000000.
+Maximum QPS achieved for file size 1000000000: 11881.88
+
+
+

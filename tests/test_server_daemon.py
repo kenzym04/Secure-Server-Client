@@ -154,10 +154,23 @@ def test_stop_command_and_stop_daemon():
     """Test the 'stop' command-line argument and the stop_daemon() function."""
     with patch('src.server_daemon.os.kill') as mock_kill, \
          patch('src.server_daemon.os.path.exists', return_value=True), \
-         patch('builtins.open', mock_open(read_data="12345")):
+         patch('builtins.open', mock_open(read_data="12345")), \
+         patch('time.sleep'), \
+         patch('os.remove') as mock_remove:
+
+        # Set up mock_kill to raise OSError on the second call
+        mock_kill.side_effect = [None] + [OSError()] * 10
 
         server_daemon.stop_daemon()
-        mock_kill.assert_called_once_with(12345, signal.SIGTERM)
+
+        # Check that kill was called with SIGTERM first
+        assert mock_kill.call_args_list[0] == call(12345, signal.SIGTERM)
+
+        # Check that kill was called to check if the process exists
+        assert mock_kill.call_count == 2  # Once for SIGTERM, once for checking
+
+        # Check that the PID file was removed
+        mock_remove.assert_called_once()
 
 @patch('subprocess.Popen')
 def test_comprehensive_daemonization(mock_popen):

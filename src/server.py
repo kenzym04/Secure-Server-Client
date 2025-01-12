@@ -333,25 +333,20 @@ def get_client_bucket(ip: str) -> TokenBucket:
         )
     return client_token_buckets[ip]
 
-def optimized_read_file(query: str) -> bool:
+def optimized_read_file(file_path: str) -> None:
     """
-    Perform an optimized search for a query string in the configured file.
+    Perform an optimized read of the file and populate the file_set.
 
     Args:
-        query (str): The string to search for in the file.
-
-    Returns:
-        bool: True if the query is found in the file, False otherwise.
+        file_path (str): The path to the file to be read.
     """
-    global file_set, file_mmap
+    global file_set
     try:
-        # Ensure linuxpath is a string
-        file_path = str(config['linuxpath'])
         with open(file_path, 'r') as f:
-            return query in f.read().splitlines()
+            file_set = set(f.read().splitlines())
     except Exception as e:
         logger.error(f"Error in optimized_read_file: {str(e)}")
-        return False
+        file_set = set()
 
 def initialize_set_mmap() -> None:
     """
@@ -379,16 +374,22 @@ def initialize_set_mmap() -> None:
         if not isinstance(linuxpath, str):
             raise TypeError("linuxpath must be a string")
 
-        with open(config['linuxpath'], 'r+b') as f:
-            file_mmap = mmap_func(f.fileno(), 0)
-            # Convert mmap object to bytes, then decode to string
-            file_content = file_mmap[:]  # This creates a bytes object from mmap
-            file_lines = file_content.decode('utf-8').splitlines()
-            file_set = set(line.strip() for line in file_lines)
+        with open(linuxpath, 'r+b') as f:
+            file_size = os.path.getsize(linuxpath)
+            file_mmap = mmap_func(f.fileno(), file_size)
+            file_content = file_mmap[:]
+            try:
+                file_lines = file_content.decode('utf-8').splitlines()
+                file_set = set(line.strip() for line in file_lines)
+            except Exception as e:
+                logger.error(f"Error initializing set and mmap: {str(e)}")
+                file_set = set()
+                file_mmap = None
     except Exception as e:
         logger.error(f"Error initializing set and mmap: {str(e)}")
         file_set = set()
         file_mmap = None
+        raise
 
 def search_query(query: str) -> str:
     """
