@@ -8,3 +8,5 @@ coverage~=7.6.9
 python-dateutil~=2.9.0.post0
 pyparsing~=3.2.0
 kiwisolver~=1.4.7
+pybloom_live~=4.0.0
+psutil~=6.1.1

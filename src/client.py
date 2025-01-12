@@ -1,17 +1,18 @@
 """
-Client Module for Interacting with Search Server
+Client Module for Server Interaction
 
-This module implements a client that connects to a server, sends search queries,
-and processes responses. It includes features such as:
+This module defines a client for connecting to a server, sending search queries,
+and handling responses. It includes the following features:
 
-1. SSL/TLS support for secure communications
-2. Configurable settings via external configuration
-3. Logging of queries, responses, and execution times
-4. Error handling and reporting
+1. SSL/TLS support for secure communications.
+2. Configurable settings via an external configuration file.
+3. Logging of query execution and responses.
+4. Comprehensive error handling and reporting.
 
-The client supports both SSL and non-SSL connections, handles various network
-errors, and provides detailed logging for debugging and performance analysis.
+Supports both SSL and non-SSL connections, detailed logging for performance analysis,
+and robust error handling.
 """
+
 import os
 import sys
 import time
@@ -22,20 +23,61 @@ import configparser
 from typing import Tuple, Optional
 from logging.handlers import RotatingFileHandler
 
-# Constants
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_PATH = os.path.join(os.path.dirname(SCRIPT_DIR), "config", "config.ini")
-LOG_FILE = os.path.join(os.path.dirname(
-    os.path.dirname(os.path.abspath(__file__))),
-    "logs", "client.log"
-)
+# Initialize configuration parser
+config = configparser.ConfigParser()
+
+# Define dynamic paths
+SCRIPT_DIR: str = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR: str = os.path.dirname(SCRIPT_DIR)
+DEFAULT_LOG_DIR = os.getenv('LOG_DIR', os.path.join(BASE_DIR, "logs"))
+DEFAULT_CONFIG_DIR = os.getenv('CONFIG_PATH', os.path.join(BASE_DIR, "config"))
+DEFAULT_DATA_DIR = os.getenv('DATA_DIR', os.path.join(BASE_DIR, "data"))
+
+# Configuration file path
+CONFIG_PATH = os.getenv('CONFIG_PATH', os.path.join(DEFAULT_CONFIG_DIR, "config.ini"))
+if not os.path.exists(CONFIG_PATH):
+    raise FileNotFoundError(f"Configuration file not found: {CONFIG_PATH}")
+
+config.read(CONFIG_PATH)
+
+# Log file path
+LOG_FILE = os.getenv('LOG_FILE', os.path.join(DEFAULT_LOG_DIR, "client.log"))
+
+# Data file path
+linuxpath = os.getenv('LINUX_PATH', config.get('server', 'linuxpath', fallback=os.path.join(DEFAULT_DATA_DIR, "200k.txt")))
+
+# PID file path
+PID_FILE = os.getenv('PID_FILE', os.path.join(BASE_DIR, "server_daemon.pid"))
+
+# Ensure required directories exist
+os.makedirs(DEFAULT_LOG_DIR, exist_ok=True)
+os.makedirs(DEFAULT_CONFIG_DIR, exist_ok=True)
+os.makedirs(DEFAULT_DATA_DIR, exist_ok=True)
+
+def validate_environment():
+    """
+    Validate the existence of critical directories required for the client.
+
+    Logs a warning for any missing paths.
+
+    Returns:
+        None
+    """
+    for path, description in [
+        (DEFAULT_CONFIG_DIR, "Configuration file"),
+        (DEFAULT_LOG_DIR, "Log directory"),
+        (DEFAULT_DATA_DIR, "Data directory"),
+        (os.path.dirname(PID_FILE), "PID file directory"),
+    ]:
+        if not os.path.exists(path):
+            logger.warning(f"{description} does not exist: {path}")
 
 def setup_logging() -> logging.Logger:
     """
-    Set up and configure logging for the client.
+    Configure logging for the client.
 
     Returns:
-        logging.Logger: Configured logger object.
+        logging.Logger: A logger instance configured for file and console output.
     """
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)
@@ -271,7 +313,7 @@ def log_failed_query(search_input: str, start_time: float) -> None:
         f"Time Taken: {round_trip_time:.2f} ms"
     )
 
-def main():
+def main() -> None:
     """
     Main function to run test queries.
     """

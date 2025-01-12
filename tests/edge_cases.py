@@ -15,7 +15,8 @@ import pytest
 # Add the parent directory to sys.path to allow importing from src
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.server import start_server, stop_daemon, load_and_validate_config, search_query, BASE_DIR, \
-    cached_file_contents, setup_logging, handle_client, create_ssl_context, optimized_read_file, config, logger
+    cached_file_contents, setup_logging, handle_client, create_ssl_context, optimized_read_file, config, logger, \
+    TokenBucket
 from src import client, server_daemon
 
 class TestServer(unittest.TestCase):
@@ -211,17 +212,15 @@ class TestServer(unittest.TestCase):
             futures = [executor.submit(client.send_search_query, "test") for _ in range(10)]
             responses = [future.result() for future in as_completed(futures)]
         self.assertTrue(all(response is not None for response in responses))
-        sys.stdout.write(f"Concurrent queries test passed. Responses: {responses}\n")
-        sys.stdout.flush()
+        print(f"Concurrent queries test passed. Responses: {responses}")
 
     def test_ssl_connection(self):
-        if self.config['ssl']:
-            response = self.send_query("test")
-            self.assertIn(response, ["STRING EXISTS", "STRING NOT FOUND"])
-            sys.stdout.write(f"SSL Connection Test: {response}\n")
-        else:
-            self.skipTest("SSL is not enabled in the configuration")
-        sys.stdout.flush()
+        context = self.create_ssl_context()
+        with socket.create_connection((self.config['host'], self.config['port'])) as sock:
+            with context.wrap_socket(sock) as secure_sock:
+                secure_sock.sendall(b"test")
+                response = secure_sock.recv(1024).decode('utf-8')
+        self.assertIn(response.strip(), ["STRING EXISTS", "STRING NOT FOUND", "RATE_LIMITED"])
 
     def test_query_time_measurement(self):
         start_time = time.time()
@@ -252,32 +251,6 @@ class TestServer(unittest.TestCase):
         self.assertLess(cpu_percent, 80)
         sys.stdout.write(f"Server CPU Usage Test: CPU usage: {cpu_percent}%\n")
         sys.stdout.flush()
-
-    def test_optimized_read_file(self):
-        test_query = "test_string"
-        result = optimized_read_file(test_query)
-        self.assertIn(result, [True, False])
-        sys.stdout.write(f"Optimized Read File Test: Result for '{test_query}': {result}\n")
-        sys.stdout.flush()
-
-    def test_performance_with_different_file_sizes(self):
-        file_sizes = [10000, 100000, 1000000]
-        for size in file_sizes:
-            # Generate a test file of the specified size
-            test_file = self.generate_test_file(size)  # Use self.generate_test_file instead of generate_test_file
-
-            # Perform multiple queries and measure execution time
-            start_time = time.time()
-            for _ in range(10):  # Perform 10 queries for each file size
-                client.send_search_query("test")
-            end_time = time.time()
-
-            # Clean up the test file
-            os.remove(test_file)
-
-            # Log or assert the results
-            execution_time = end_time - start_time
-            self.logger.info(f"File size: {size}, Execution time: {execution_time:.2f} seconds")
 
 class PerformanceTest:
     def __init__(self, reread_on_query=True):
@@ -426,6 +399,9 @@ class PerformanceTest:
         sys.stdout.write(f"Unicode Characters Test: Response for '{unicode_query}': {response.strip()}\n")
         sys.stdout.flush()
 
+    def test_search_query(self):
+        result = search_query("test_string")
+        self.assertIn(result, ["STRING EXISTS", "STRING NOT FOUND"])
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

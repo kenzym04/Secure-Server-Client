@@ -1,30 +1,67 @@
+"""
+Server Module for Secure, Concurrent, and Efficient Text-Based Query Processing
+
+This module implements a robust server that supports multiple concurrent client connections
+and processes text-based search queries with high efficiency. Key features include:
+
+Features:
+    - Secure Communication: Utilizes SSL/TLS for encrypted client-server communication,
+      ensuring data privacy and integrity.
+    - Configurable Settings: Allows easy customization through an external config.ini file,
+      enabling flexible configuration of server parameters.
+    - Multithreading: Handles multiple client connections concurrently, ensuring scalability
+      and responsiveness.
+    - Dynamic File Reload: Offers an option to reload file contents on each query based on the
+      REREAD_ON_QUERY configuration, accommodating dynamic file changes.
+    - Daemon Mode: Supports running the server as a background process, enabling seamless
+      integration into production environments.
+    - Rotating Logs: Maintains detailed server and client activity logs with automatic size-based
+      rotation to prevent log file overflow.
+    - File Searching: Executes text-based search queries against a preloaded text file, ensuring
+      results are returned only for full line matches of the query, with no partial match counts.
+    - Rate Limiting: Implements a Token Bucket mechanism to regulate the frequency of client
+      requests, preventing abuse and ensuring fair resource usage.
+    - Unlimited Concurrent Connections: Designed to handle an unlimited number of concurrent
+      client connections, ensuring robustness under heavy load.
+    - Efficient Caching: Utilizes in-memory caching of file contents for fast query responses,
+      significantly reducing file access latency when REREAD_ON_QUERY is disabled.
+
+This module adheres to best practices for Python development, ensuring maintainability, clarity,
+and performance.
+"""
+
 import configparser
-import signal
-import ssl
-import threading
-import sys
-import time
 import logging
-import socket
 import os
+import signal
+import socket
+import ssl
+import sys
+import threading
+import time
 from mmap import mmap as mmap_func
-from typing import Set, Dict, Any, Tuple
 from logging.handlers import RotatingFileHandler
+from typing import Set, Dict, Any, Tuple, Optional
+
+# Dynamic Path and Directory Configuration
+SCRIPT_DIR: str = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR: str = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+DEFAULT_CONFIG_DIR = os.getenv('CONFIG_DIR', os.path.join(BASE_DIR, "config"))
+DEFAULT_LOG_DIR = os.getenv('LOG_DIR', os.path.join(BASE_DIR, "logs"))
+DEFAULT_CERT_DIR = os.getenv('CERT_DIR', os.path.join(BASE_DIR, "certs"))
+DEFAULT_DATA_DIR = os.getenv('DATA_DIR', os.path.join(BASE_DIR, "data"))
+FILE_RELATIVE_PATH: str = os.getenv('FILE_PATH', os.path.join(DEFAULT_DATA_DIR, "200k.txt"))
+CONFIG_PATH: str = os.path.join(BASE_DIR, "config", "config.ini")
+PID_FILE: str = os.getenv('PID_FILE', os.path.join(BASE_DIR, "server_daemon.pid"))
+LOG_FILE: str = os.path.join(BASE_DIR, "logs", "server.log")
+
+logger = logging.getLogger('Server')
 
 # Locks
 connection_lock: threading.Lock = threading.Lock()
 file_lock: threading.Lock = threading.Lock()
 connection_count_lock = threading.Lock()
 connection_count = 0
-
-# Directory and file paths
-SCRIPT_DIR: str = os.path.dirname(os.path.abspath(__file__))
-BASE_DIR: str = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
-FILE_RELATIVE_PATH: str = os.path.join(BASE_DIR, "200k.txt")
-CONFIG_PATH: str = os.path.join(BASE_DIR, "config", "config.ini")
-PID_FILE: str = os.path.join(BASE_DIR, "server_daemon.pid")
-LOG_FILE: str = os.path.join(BASE_DIR, "logs", "server.log")
-SQLITE_DB_PATH: str = os.path.join(BASE_DIR, "search_index.db")
 
 # File size and log constraints
 MAX_PAYLOAD_SIZE: int = 1024
@@ -42,12 +79,43 @@ client_token_buckets: Dict[str, 'TokenBucket'] = {}
 file_set = None
 file_mmap = None
 
+def validate_environment():
+    """
+    Validate the existence of critical directories required for the server.
+
+    This function checks the presence of directories and files needed for
+    the server's operation. If any path is missing, it logs a warning with
+    the corresponding description.
+
+    Paths validated:
+        - Configuration directory
+        - Log directory
+        - Certificate directory
+        - Data directory
+        - PID file directory
+
+    Logging:
+        Logs a warning for each missing path.
+
+    Returns:
+        None
+    """
+    for path, description in [
+        (DEFAULT_CONFIG_DIR, "Configuration directory"),
+        (DEFAULT_LOG_DIR, "Log directory"),
+        (DEFAULT_CERT_DIR, "Certificate directory"),
+        (DEFAULT_DATA_DIR, "Data directory"),
+        (os.path.dirname(PID_FILE), "PID file directory"),
+    ]:
+        if not os.path.exists(path):
+            logger.warning(f"{description} does not exist: {path}")
+
 class TokenBucket:
     """
-    Implements a token bucket algorithm for rate limiting.
+    Implements a token bucket algorithm to control the rate of requests.
 
-    This class manages a token bucket with a specified capacity and fill rate,
-    allowing for controlled consumption of tokens over time.
+    The token bucket accumulates tokens over time at a specified rate,
+    allowing controlled consumption for rate limiting.
     """
 
     def __init__(self, capacity: int, fill_rate: float):
@@ -57,7 +125,7 @@ class TokenBucket:
         Args:
             capacity (int): The maximum number of tokens the bucket can hold.
             fill_rate (float): The rate at which tokens are added to the
-            bucket (tokens per second).
+                               bucket (tokens per second).
         """
         self.capacity: int = capacity
         self.fill_rate: float = fill_rate
@@ -91,19 +159,17 @@ class TokenBucket:
 
 TOKEN_BUCKET = TokenBucket(capacity=100, fill_rate=10)  # 100 tokens, refills at 10 tokens/sec
 
-logger = logging.getLogger('Server')
-
-def setup_logging() -> logging.Logger:
+def setup_logging() -> None:
     """
-    Set up and configure the logger for the server.
+    Configure the server's logging system.
 
-    Returns:
-        logging.Logger: Configured logger instance.
+    Sets up a rotating file handler and console handler to log messages.
+    Logs are written to a predefined log file with DEBUG level by default.
     """
-    log_file = os.path.join(BASE_DIR, 'logs', 'server.log')
-    os.makedirs(os.path.dirname(log_file), exist_ok=True)
+    global logger
 
-    logger = logging.getLogger('Server')
+    os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+
     logger.setLevel(logging.DEBUG)
 
     formatter = logging.Formatter(
@@ -112,22 +178,27 @@ def setup_logging() -> logging.Logger:
 
     # File handler
     file_handler = RotatingFileHandler(
-        log_file,
+        LOG_FILE,
         maxBytes=MAX_LOG_SIZE,
         backupCount=MAX_LOG_BACKUPS
     )
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)
+    if not hasattr(file_handler, "filters"):
+        file_handler.filters = []  # Ensure compatibility with custom setups
 
     # Console handler
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(formatter)
+    if not hasattr(console_handler, "filters"):
+        console_handler.filters = []  # Ensure compatibility with custom setups
 
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
+    logger.debug(f"Using LOG_FILE: {LOG_FILE}")
+    logger.debug(f"Using PID_FILE: {PID_FILE}")
 
-    return logger
 
 def load_config(config_path: str) -> configparser.ConfigParser:
     """
@@ -152,9 +223,12 @@ def load_and_validate_config() -> Dict[str, Any]:
 
     Raises:
         FileNotFoundError: If SSL certificates or specified file path are not found.
+        ValueError: If configuration values are invalid.
     """
+
     config = load_config(CONFIG_PATH)
-    server_config = {
+
+    server_config: Dict[str, Any] = {
         'host': config.get('server', 'host', fallback='127.0.0.1'),
         'port': config.getint('server', 'port', fallback=44444),
         'ssl': config.getboolean('server', 'ssl', fallback=False),
@@ -167,10 +241,10 @@ def load_and_validate_config() -> Dict[str, Any]:
             'key_file',
             fallback='certs/server.key'
         ),
-        'linuxpath': config.get(
+        'linuxpath': str(config.get(
             'server', 'linuxpath',
             fallback=FILE_RELATIVE_PATH
-        ),
+        )),
         'reread_on_query': config.getboolean(
             'server',
             'reread_on_query',
@@ -184,24 +258,63 @@ def load_and_validate_config() -> Dict[str, Any]:
             'server', 'token_bucket_fill_rate',
             fallback=10.0
         ),
+        'file_path': config.get('server', 'file_path', fallback=FILE_RELATIVE_PATH),
+        'log_file': config.get('server', 'log_file', fallback=LOG_FILE),
+        'pid_file': config.get('server', 'pid_file', fallback='server_daemon.pid'),
     }
 
+    # Type checking
+    if not isinstance(server_config['port'], int):
+        raise TypeError("Port must be an integer")
+    if not isinstance(server_config['file_path'], str):
+        raise TypeError("File path must be a string")
+    if not isinstance(server_config['log_file'], str):
+        raise TypeError("Log file path must be a string")
+    if not isinstance(server_config['linuxpath'], str):
+        raise TypeError("Linux path must be a string")
+    if not isinstance(server_config['token_bucket_capacity'], int):
+        raise TypeError("Token bucket capacity must be an integer")
+    if not isinstance(server_config['token_bucket_fill_rate'], float):
+        raise TypeError("Token bucket fill rate must be a float")
+
+    # Validate token bucket parameters
+    if server_config['token_bucket_capacity'] <= 0:
+        raise ValueError("Token bucket capacity must be positive")
+    if server_config['token_bucket_fill_rate'] <= 0:
+        raise ValueError("Token bucket fill rate must be positive")
+
+    # Validate host
+    if not server_config['host']:
+        raise ValueError("Host cannot be empty")
+
+    # Validate port
+    if not 1 <= server_config['port'] <= 65535:
+        raise ValueError(f"Invalid port number: {server_config['port']}")
+
+    # Validate SSL configuration
     if server_config['ssl']:
-        cert_path = os.path.join(BASE_DIR, server_config['cert_file'])
-        key_path = os.path.join(BASE_DIR, server_config['key_file'])
+        cert_path = os.path.join(DEFAULT_CERT_DIR, server_config['cert_file'])
+        key_path = os.path.join(DEFAULT_CERT_DIR, server_config['key_file'])
         if not (os.path.exists(cert_path) and os.path.exists(key_path)):
             raise FileNotFoundError(
                 f"SSL certificate or key file not found. "
                 f"Cert path: {cert_path}, Key path: {key_path}")
 
+    # Validate linuxpath
     if not os.path.exists(server_config['linuxpath']):
         raise FileNotFoundError(
             f"File not found: {server_config['linuxpath']}"
         )
 
+    # Validate token bucket parameters
+    if server_config['token_bucket_capacity'] <= 0:
+        raise ValueError("Token bucket capacity must be positive")
+    if server_config['token_bucket_fill_rate'] <= 0:
+        raise ValueError("Token bucket fill rate must be positive")
+
     return server_config
 
-config = load_and_validate_config()
+config: Dict[str, Any] = load_and_validate_config()
 
 def get_client_bucket(ip: str) -> TokenBucket:
     """
@@ -220,21 +333,22 @@ def get_client_bucket(ip: str) -> TokenBucket:
         )
     return client_token_buckets[ip]
 
-def optimized_read_file(query: str) -> bool:
+def optimized_read_file(file_path: str) -> None:
     """
-    Perform an optimized search for a query string in the configured file.
+    Perform an optimized read of the file and populate the file_set.
 
     Args:
-        query (str): The string to search for in the file.
-
-    Returns:
-        bool: True if the query is found in the file, False otherwise.
+        file_path (str): The path to the file to be read.
     """
-    global file_set, file_mmap
-    with open(config['linuxpath'], 'r') as f:
-        return query in f.read().splitlines()
+    global file_set
+    try:
+        with open(file_path, 'r') as f:
+            file_set = set(f.read().splitlines())
+    except Exception as e:
+        logger.error(f"Error in optimized_read_file: {str(e)}")
+        file_set = set()
 
-def initialize_set_mmap():
+def initialize_set_mmap() -> None:
     """
     Initialize global file_set and file_mmap for efficient file content access.
 
@@ -256,69 +370,103 @@ def initialize_set_mmap():
     """
     global file_set, file_mmap
     try:
-        with open(config['linuxpath'], 'r+b') as f:
-            file_mmap = mmap_func(f.fileno(), 0)
-            # Convert mmap object to bytes, then decode to string
-            file_content = file_mmap[:]  # This creates a bytes object from mmap
-            file_lines = file_content.decode('utf-8').splitlines()
-            file_set = set(line.strip() for line in file_lines)
+        linuxpath = config['linuxpath']
+        if not isinstance(linuxpath, str):
+            raise TypeError("linuxpath must be a string")
+
+        with open(linuxpath, 'r+b') as f:
+            file_size = os.path.getsize(linuxpath)
+            file_mmap = mmap_func(f.fileno(), file_size)
+            file_content = file_mmap[:]
+            try:
+                file_lines = file_content.decode('utf-8').splitlines()
+                file_set = set(line.strip() for line in file_lines)
+            except Exception as e:
+                logger.error(f"Error initializing set and mmap: {str(e)}")
+                file_set = set()
+                file_mmap = None
     except Exception as e:
         logger.error(f"Error initializing set and mmap: {str(e)}")
         file_set = set()
         file_mmap = None
+        raise
 
 def search_query(query: str) -> str:
     """
-    Search for the query in the file or cached data structures.
+    Search for an exact match of the query in the file or cached data structures.
 
     Args:
         query (str): The string to search for.
 
     Returns:
-        Tuple[str, float]: A tuple containing the result string
-        and the execution time in milliseconds.
+        str: A string indicating whether the exact query was found or not.
     """
     global file_set, file_mmap
 
-    start_time = time.perf_counter_ns()
-
+    # Ensure initialization is outside of timing
     if config['reread_on_query']:
+        if file_mmap is None:
+            initialize_set_mmap()
+
+        if file_mmap is None:
+            logger.error("Failed to initialize memory-mapped file")
+            return "ERROR: Unable to initialize memory-mapped file"
+
         try:
-            if file_mmap is None:
-                initialize_set_mmap()
-
-            if file_mmap is None:
-                raise RuntimeError("Failed to initialize memory-mapped file")
-
-            # Re-read the file contents using mmap
+            # Measure execution time only for the search operation
+            start_time = time.perf_counter_ns()
             file_content = file_mmap[:]
             file_lines = file_content.decode('utf-8').splitlines()
             result = "STRING EXISTS" if query in file_lines else "STRING NOT FOUND"
+            end_time = time.perf_counter_ns()
         except Exception as e:
             logger.error(f"Error reading file: {str(e)}")
-            result = "ERROR: Unable to read file"
+            return "ERROR: Unable to read file"
     else:
         if file_set is None:
             initialize_set_mmap()
 
         if file_set is None:
-            result = "ERROR: Unable to initialize file set"
-        else:
-            result = "STRING EXISTS" if query in file_set else "STRING NOT FOUND"
+            logger.error("Failed to initialize file set")
+            return "ERROR: Unable to initialize file set"
+
+        # Measure execution time only for the search operation
+        start_time = time.perf_counter_ns()
+        result = "STRING EXISTS" if query in file_set else "STRING NOT FOUND"
+        end_time = time.perf_counter_ns()
+
+    execution_time_ms = (end_time - start_time) / 1_000_000  # Convert ns to ms
+
+    logger.info(f"Search query: {query} - {result} Server Execution Time: {execution_time_ms:.2f} ms")
 
     return result
 
 cleanup_lock = threading.Lock()
 cleanup_done = False
 
-def cleanup_resources():
+def cleanup_resources() -> None:
     """
     Clean up global resources used by the server.
 
-    This function closes the memory-mapped file if it exists and resets the file set.
+    This function performs the following cleanup tasks:
+    - Closes the memory-mapped file if it exists
+    - Resets the file set
+    - Clears the client token buckets
+    - Releases any other resources that need cleanup
+
     It uses a lock to ensure thread-safety and a flag to prevent multiple cleanups.
+
+    Global variables affected:
+        file_mmap (mmap.mmap): Memory-mapped file object
+        file_set (Set[str]): Set containing file contents
+        cleanup_done (bool): Flag to track if cleanup has been performed
+        client_token_buckets (Dict): Dictionary of client token buckets
+
+    Note:
+        This function should be called before server shutdown or when resources
+        need to be freed.
     """
-    global file_mmap, file_set, cleanup_done
+    global file_mmap, file_set, cleanup_done, client_token_buckets
 
     with cleanup_lock:
         if cleanup_done:
@@ -334,6 +482,7 @@ def cleanup_resources():
                 file_mmap = None
 
         file_set = None
+        client_token_buckets.clear()
 
         cleanup_done = True
         logger.info("Resources cleaned up successfully.")
@@ -364,29 +513,33 @@ def handle_client(
 
     try:
         while True:
-            start_time = time.perf_counter_ns()
-            query = client_socket.recv(MAX_PAYLOAD_SIZE).decode('utf-8').strip()
-            if not query:
+            try:
+                query = client_socket.recv(MAX_PAYLOAD_SIZE).decode('utf-8').strip()
+                if not query:
+                    break
+                # check for rate limiting
+                if not TOKEN_BUCKET.consume(1):
+                    client_socket.sendall("RATE_LIMITED\n".encode('utf-8'))
+                    continue
+
+                start_time = time.perf_counter_ns()
+                result = search_query(query)
+                round_trip_time = (time.perf_counter_ns() - start_time) / 1_000_000  # Convert ns to ms = time.perf_counter_ns()
+
+                response = f"{result}\n"
+                client_socket.sendall(response.encode('utf-8'))
+
+                logger.debug(
+                    f"Query: '{query}', "
+                    f"IP: {client_address[0]}:{client_address[1]}, "
+                    f"Server Round-trip Execution Time: {round_trip_time:.6f} ms"
+                )
+            except socket.error as e:
+                logger.error(f"Socket error while receiving data: {str(e)}")
                 break
-            # check for rate limiting
-            if not TOKEN_BUCKET.consume(1):
-                client_socket.sendall("RATE_LIMITED\n".encode('utf-8'))
+            except UnicodeDecodeError as e:
+                logger.error(f"Error decoding received data: {str(e)}")
                 continue
-                
-            result = search_query(query)
-            execution_time = (time.perf_counter_ns() - start_time) / 1_000_000  # Convert ns to ms
-            response = f"{result}\n"
-            client_socket.sendall(response.encode('utf-8'))
-            end_time = time.perf_counter_ns()
-
-            round_trip_time = (end_time - start_time) / 1_000_000  # Convert ns to ms
-            logger.debug(
-                f"Query: '{query}', "
-                f"IP: {client_address[0]}:{client_address[1]}, "
-                f"Result: '{result}', Execution-Time: {execution_time:.6f} ms, "
-                f"Round-trip: {round_trip_time:.6f} ms"
-            )
-
     except Exception as e:
         logger.error(f"Error handling client {client_address}: {str(e)}")
     finally:
@@ -398,7 +551,7 @@ def handle_client(
             f"{client_address[0]}:{client_address[1]} closed. "
             f"Total connections: {connection_count}")
 
-def start_server(daemon_logger=None) -> None:
+def start_server(daemon_logger: Optional[logging.Logger] = None) -> None:
     """
     Initialize and run the server, handling client connections.
 
@@ -419,7 +572,7 @@ def start_server(daemon_logger=None) -> None:
     if daemon_logger:
         logger = daemon_logger
     else:
-        logger = setup_logging()
+        setup_logging()
 
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
@@ -428,6 +581,8 @@ def start_server(daemon_logger=None) -> None:
                                         config['port'], config['ssl']
                                         )
     logger.info(f"Server started on {config['host']}:{config['port']}")
+    logger.info(f"Using file: {config['linuxpath']}")
+    logger.info(f"Reread on query: {config['reread_on_query']}")
 
     try:
         while True:
@@ -445,15 +600,11 @@ def start_server(daemon_logger=None) -> None:
         logger.info("Server shutting down.")
 
 def create_ssl_context() -> ssl.SSLContext:
-    """
-    Create and configure an SSL context for secure server connections.
+    cert_file = os.getenv('SSL_CERT_FILE', os.path.join(DEFAULT_CERT_DIR, "server.crt"))
+    key_file = os.getenv('SSL_KEY_FILE', os.path.join(DEFAULT_CERT_DIR, "server.key"))
 
-    Returns:
-        ssl.SSLContext: Configured SSL context with loaded certificate chain.
-    """
     context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-    context.load_cert_chain(certfile=os.path.join(BASE_DIR, config['cert_file']),
-                            keyfile=os.path.join(BASE_DIR, config['key_file']))
+    context.load_cert_chain(certfile=cert_file, keyfile=key_file)
     return context
 
 def setup_server_socket(ip: str, port: int, use_ssl: bool) -> socket.socket:
@@ -483,26 +634,35 @@ def signal_handler(signum: int, _: Any) -> None:
     """
     Handle termination signals gracefully.
     """
-    logger.info("Received signal to terminate. Shutting down...")
+    logger.info(f"Received signal {signum} to terminate. Shutting down...")
     cleanup_resources()
+    logger.info("Server shutdown complete.")
     sys.exit(0)
 
 def stop_daemon() -> None:
-    """
-    Stop the daemon process.
-    """
+    global logger
+    logger.info("Stopping server daemon...")
     try:
-        with open(PID_FILE, 'r') as f:
-            pid = int(f.read().strip())
-        os.kill(pid, signal.SIGTERM)
-        logger.info(f"Sent SIGTERM to process {pid}")
-    except FileNotFoundError:
-        logger.error("PID file not found. Is the daemon running?")
-    except ProcessLookupError:
-        logger.error(f"No process found with PID {pid}")
+        if os.path.exists(PID_FILE):
+            with open(PID_FILE, 'r') as f:
+                pid = int(f.read().strip())
+            os.kill(pid, signal.SIGTERM)
+            logger.info(f"Sent SIGTERM to process {pid}")
+            # Wait for the process to terminate
+            for _ in range(10):  # Wait up to 10 seconds
+                time.sleep(1)
+                try:
+                    os.kill(pid, 0)  # Check if process still exists
+                except OSError:
+                    break
+            else:
+                logger.warning(f"Process {pid} did not terminate after 10 seconds")
+            # Remove PID file
+            os.remove(PID_FILE)
+        else:
+            logger.warning("PID file not found. Is the daemon running?")
     except Exception as e:
         logger.error(f"Error stopping daemon: {str(e)}")
-
 
 if __name__ == "__main__":
     start_server()

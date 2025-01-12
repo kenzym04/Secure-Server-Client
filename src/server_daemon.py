@@ -1,36 +1,34 @@
 """
-Server Daemon Module
+Daemon Module for Running Server
 
-This module provides functionality to run the server as a daemon process in a
-Unix-like environment. It encapsulates the complexities of daemon management,
-including process forking, signal handling, logging, and server lifecycle
-management.
+This module provides functionalities to run the server as a daemon process.
+Key features include:
 
-Key Features:
-- Daemonization: Forks the process to run in the background, detached from the
-  terminal.
-- Logging: Configures rotating log files for persistent logging of daemon
-  activities.
-- Signal Handling: Manages graceful shutdown on receiving termination signals.
-- Server Management: Handles starting, stopping, and running the server process.
-- Rate Limiting: Implements request rate limiting inherited from the main server
-  module.
-
-Main Components:
-- setup_logging: Configures the logging system for the daemon.
-- signal_handler: Manages termination signals for graceful shutdown.
-- daemonize: Performs the process of turning the current process into a daemon.
-- run_daemon: Executes the main server logic in daemon mode.
-- handle_request: Processes individual client requests with rate limiting.
-- main: Entry point for starting or stopping the daemon based on command-line
-  arguments.
+- Daemonization: Detach the process from the terminal to run in the background.
+- Logging: Configures rotating log files for capturing daemon activities.
+- Signal Handling: Ensures graceful shutdown on termination signals.
+- Server Lifecycle: Manages starting, stopping, and running the server.
+- Rate Limiting: Inherits request rate limiting from the main server module.
 
 Usage:
-    To start the daemon: python server_daemon.py --daemon
-    To stop the daemon:  python server_daemon.py stop
+    Start daemon: python server_daemon.py --daemon
+    Stop daemon:  python server_daemon.py stop
+"""
+"""
+Daemon Module for Running Server
 
-Note: This module is designed to work in conjunction with the main server module,
-inheriting core server functionality while adding daemon-specific features.
+This module provides functionalities to run the server as a daemon process.
+Key features include:
+
+- Daemonization: Detach the process from the terminal to run in the background.
+- Logging: Configures rotating log files for capturing daemon activities.
+- Signal Handling: Ensures graceful shutdown on termination signals.
+- Server Lifecycle: Manages starting, stopping, and running the server.
+- Rate Limiting: Inherits request rate limiting from the main server module.
+
+Usage:
+    Start daemon: python server_daemon.py --daemon
+    Stop daemon:  python server_daemon.py stop
 """
 
 import os
@@ -39,9 +37,9 @@ import sys
 import signal
 import time
 import logging
-from logging.handlers import RotatingFileHandler
 import threading
 from typing import Any, NoReturn
+from logging.handlers import RotatingFileHandler
 
 # Add the project root directory to the Python path
 project_root = os.path.abspath(
@@ -66,32 +64,48 @@ except ImportError:
                             )
 
 # Constants
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-BASE_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
-PID_FILE = os.path.join(BASE_DIR, "server_daemon.pid")
-LOG_FILE = os.path.join(BASE_DIR, "logs", "server_daemon.log")
+SCRIPT_DIR: str = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR: str = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 
 # Global variables
-logger = None
+logger = logging.getLogger('Server Daemon')
 connection_count: int = 0
 connection_lock: threading.Lock = threading.Lock()
 
+# Dynamic Path Configuration
+DEFAULT_CONFIG_DIR = os.getenv('CONFIG_DIR', os.path.join(BASE_DIR, "config"))
+DEFAULT_LOG_DIR = os.getenv('LOG_DIR', os.path.join(BASE_DIR, "logs"))
+DEFAULT_PID_DIR = os.getenv('PID_DIR', BASE_DIR)
+SERVER_HOST = os.getenv('SERVER_HOST', '127.0.0.1')
+SERVER_PORT = int(os.getenv('SERVER_PORT', 44444))
+
+# Paths
+PID_FILE: str = os.getenv('PID_FILE', os.path.join(DEFAULT_PID_DIR, "server_daemon.pid"))
+LOG_FILE: str = os.getenv('LOG_FILE', os.path.join(DEFAULT_LOG_DIR, "server_daemon.log"))
+
+def validate_environment():
+    for path, description in [
+        (DEFAULT_CONFIG_DIR, "Configuration directory"),
+        (DEFAULT_LOG_DIR, "Log directory"),
+        (DEFAULT_PID_DIR, "PID directory"),
+    ]:
+        if not os.path.exists(path):
+            logger.warning(f"{description} does not exist: {path}")
+
 def setup_logging() -> logging.Logger:
-    """Set up logging for the server daemon with file and console handlers.
+    """
+    Configure logging for the server daemon.
 
     Returns:
-        logging.Logger: Configured logger object for use throughout the application.
+        logging.Logger: Logger configured for file and console logging.
 
-    This function configures a logger named 'ServerDaemon' with the following:
-    - A rotating file handler (max size 10MB, 5 backups) logging to LOG_FILE.
-    - A console handler for immediate output during development or debugging.
-    - Logging level set to DEBUG for comprehensive logging.
-    - A formatter including timestamp, logger name, log level, and message.
-
-    The log directory is created if it doesn't exist.
+    This includes:
+    - Rotating file handler with a maximum size and backups.
+    - Console handler for immediate logging during development.
     """
-    logger = logging.getLogger('ServerDaemon')
     logger.handlers.clear()  # Clear any existing handlers
+
+    # Ensure the directory for the log file exists
     log_dir = os.path.dirname(LOG_FILE)
     os.makedirs(log_dir, exist_ok=True)
 
@@ -109,6 +123,8 @@ def setup_logging() -> logging.Logger:
     logger.setLevel(logging.DEBUG)
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
+    logger.debug(f"Using LOG_FILE: {LOG_FILE}")
+    logger.debug(f"Using PID_FILE: {PID_FILE}")
 
     return logger
 
@@ -142,6 +158,11 @@ def daemonize() -> None:
         OSError: If fork operations fail.
         IOError: If writing to the PID file fails.
     """
+    global logger
+    if logger is None:
+        logger = setup_logging()
+
+    # Do first fork
     try:
         pid = os.fork()
         if pid > 0:
@@ -152,7 +173,7 @@ def daemonize() -> None:
         sys.exit(1)
 
     # Decouple from parent environment
-    os.chdir("/")
+    os.chdir(BASE_DIR)
     os.setsid()
     os.umask(0)
 
@@ -280,7 +301,7 @@ def main() -> None:
         try:
             # Try to bind to the port to check if it's already in use
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind(('127.0.0.1', 44444))  # Use the same port as in your server configuration
+                s.bind((SERVER_HOST, SERVER_PORT))  # Use the same port as in your server configuration
         except socket.error as e:
             if e.errno == 98:  # Address already in use
                 print("Error: Server daemon is already running...")
