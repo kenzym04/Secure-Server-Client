@@ -65,4 +65,158 @@ Server unable to handle more than 4 queries per second for file size 1000000000.
 Maximum QPS achieved for file size 1000000000: 11881.88
 
 
+Server.log REREAD_ON_QUERY=TRUE/FALSE
+SSL=True, REREAD_ON_QUERY=True
+2025-01-13 20:44:52,109 - Server - DEBUG: New connection from 127.0.0.1:47502. Total connections: 1
+2025-01-13 20:44:52,126 - Server - INFO: Search query: 3;0;1;28;0;7;5;0; - STRING EXISTS Server Execution Time: 16.071664 ms
+2025-01-13 20:44:52,130 - Server - DEBUG: Query: '3;0;1;28;0;7;5;0;', IP: 127.0.0.1:47502, Server Round-trip Execution Time: 20.580238 ms
+2025-01-13 20:44:52,161 - Server - DEBUG: Connection from 127.0.0.1:47502 closed. Total connections: 0
+2025-01-13 20:44:52,185 - Server - DEBUG: New connection from 127.0.0.1:47506. Total connections: 1
+2025-01-13 20:44:52,203 - Server - INFO: Search query: 10;0;1;26;0;8;3;0; - STRING EXISTS Server Execution Time: 17.715333 ms
+2025-01-13 20:44:52,209 - Server - DEBUG: Query: '10;0;1;26;0;8;3;0;', IP: 127.0.0.1:47506, Server Round-trip Execution Time: 22.978714 ms
+2025-01-13 20:44:52,230 - Server - DEBUG: Connection from 127.0.0.1:47506 closed. Total connections: 0
+2025-01-13 20:44:52,255 - Server - DEBUG: New connection from 127.0.0.1:47508. Total connections: 1
+2025-01-13 20:44:52,274 - Server - INFO: Search query: non-existent-string - STRING NOT FOUND Server Execution Time: 18.768975 ms
+2025-01-13 20:44:52,279 - Server - DEBUG: Query: 'non-existent-string', IP: 127.0.0.1:47508, Server Round-trip Execution Time: 23.554539 ms
+2025-01-13 20:44:52,300 - Server - DEBUG: Connection from 127.0.0.1:47508 closed. Total connections: 0
+2025-01-13 20:44:52,705 - Server - DEBUG: New connection from 127.0.0.1:47518. Total connections: 1
+2025-01-13 20:44:52,722 - Server - INFO: Search query: 3;0;1;28;0;7;5;0; - STRING EXISTS Server Execution Time: 15.980313 ms
+2025-01-13 20:44:52,726 - Server - DEBUG: Query: '3;0;1;28;0;7;5;0;', IP: 127.0.0.1:47518, Server Round-trip Execution Time: 20.637157 ms
+2025-01-13 20:44:52,750 - Server - DEBUG: Connection from 127.0.0.1:47518 closed. Total connections: 0
+2025-01-13 20:44:52,775 - Server - DEBUG: New connection from 127.0.0.1:47526. Total connections: 1
+2025-01-13 20:44:52,792 - Server - INFO: Search query: 10;0;1;26;0;8;3;0; - STRING EXISTS Server Execution Time: 16.576949 ms
+2025-01-13 20:44:52,797 - Server - DEBUG: Query: '10;0;1;26;0;8;3;0;', IP: 127.0.0.1:47526, Server Round-trip Execution Time: 20.741043 ms
+2025-01-13 20:44:52,821 - Server - DEBUG: Connection from 127.0.0.1:47526 closed. Total connections: 0
+2025-01-13 20:44:52,845 - Server - DEBUG: New connection from 127.0.0.1:47538. Total connections: 1
+2025-01-13 20:44:52,866 - Server - INFO: Search query: non-existent-string - STRING NOT FOUND Server Execution Time: 19.709854 ms
+2025-01-13 20:44:52,871 - Server - DEBUG: Query: 'non-existent-string', IP: 127.0.0.1:47538, Server Round-trip Execution Time: 24.695497 ms
+2025-01-13 20:44:52,891 - Server - DEBUG: Connection from 127.0.0.1:47538 closed. Total connections: 0
+2025-01-13 20:44:52,511 - Server - DEBUG: New connection from 127.0.0.1:47540. Total connections: 1
+2025-01-13 20:44:52,527 - Server - INFO: Search query: 3;0;1;28;0;7;5;0; - STRING EXISTS Server Execution Time: 15.719745 ms
+2025-01-13 20:44:52,532 - Server - DEBUG: Query: '3;0;1;28;0;7;5;0;', IP: 127.0.0.1:47540, Server Round-trip Execution Time: 20.176075 ms
+2025-01-13 20:44:52,560 - Server - DEBUG: Connection from 127.0.0.1:47540 closed. Total connections: 0
+2025-01-13 20:44:52,583 - Server - DEBUG: New connection from 127.0.0.1:47544. Total connections: 1
+2025-01-13 20:44:52,601 - Server - INFO: Search query: 10;0;1;26;0;8;3;0; - STRING EXISTS Server Execution Time: 17.117255 ms
+2025-01-13 20:44:52,606 - Server - DEBUG: Query: '10;0;1;26;0;8;3;0;', IP: 127.0.0.1:47544, Server Round-trip Execution Time: 21.616192 ms
+2025-01-13 20:44:52,629 - Server - DEBUG: Connection from 127.0.0.1:47544 closed. Total connections: 0
+2025-01-13 20:44:52,655 - Server - DEBUG: New connection from 127.0.0.1:47558. Total connections: 1
+2025-01-13 20:44:52,674 - Server - INFO: Search query: non-existent-string - STRING NOT FOUND Server Execution Time: 18.628578 ms
+2025-01-13 20:44:52,681 - Server - DEBUG: Query: 'non-existent-string', IP: 127.0.0.1:47558, Server Round-trip Execution Time: 25.550773 ms
+2025-01-13 20:44:52,699 - Server - DEBUG: Connection from 127.0.0.1:47558 closed. Total connections: 0
 
+
+SSL=True, REREAD_ON_QUERY=False
+2025-01-13 20:45:45,955 - Server - DEBUG: New connection from 127.0.0.1:49838. Total connections: 1
+2025-01-13 20:45:45,956 - Server - INFO: Search query: 3;0;1;28;0;7;5;0; - STRING EXISTS Server Execution Time: 0.001118 ms
+2025-01-13 20:45:45,957 - Server - DEBUG: Query: '3;0;1;28;0;7;5;0;', IP: 127.0.0.1:49838, Server Round-trip Execution Time: 0.510037 ms
+2025-01-13 20:45:46,001 - Server - DEBUG: Connection from 127.0.0.1:49838 closed. Total connections: 0
+2025-01-13 20:45:46,027 - Server - DEBUG: New connection from 127.0.0.1:49844. Total connections: 1
+2025-01-13 20:45:46,027 - Server - INFO: Search query: 10;0;1;26;0;8;3;0; - STRING EXISTS Server Execution Time: 0.001375 ms
+2025-01-13 20:45:46,028 - Server - DEBUG: Query: '10;0;1;26;0;8;3;0;', IP: 127.0.0.1:49844, Server Round-trip Execution Time: 0.547698 ms
+2025-01-13 20:45:46,071 - Server - DEBUG: Connection from 127.0.0.1:49844 closed. Total connections: 0
+2025-01-13 20:45:46,095 - Server - DEBUG: New connection from 127.0.0.1:49848. Total connections: 1
+2025-01-13 20:45:46,096 - Server - INFO: Search query: non-existent-string - STRING NOT FOUND Server Execution Time: 0.000667 ms
+2025-01-13 20:45:46,096 - Server - DEBUG: Query: 'non-existent-string', IP: 127.0.0.1:49848, Server Round-trip Execution Time: 0.422339 ms
+2025-01-13 20:45:46,142 - Server - DEBUG: Connection from 127.0.0.1:49848 closed. Total connections: 0
+2025-01-13 20:45:47,399 - Server - DEBUG: New connection from 127.0.0.1:49850. Total connections: 1
+2025-01-13 20:45:47,400 - Server - INFO: Search query: 3;0;1;28;0;7;5;0; - STRING EXISTS Server Execution Time: 0.001785 ms
+2025-01-13 20:45:47,400 - Server - DEBUG: Query: '3;0;1;28;0;7;5;0;', IP: 127.0.0.1:49850, Server Round-trip Execution Time: 0.475580 ms
+2025-01-13 20:45:47,451 - Server - DEBUG: Connection from 127.0.0.1:49850 closed. Total connections: 0
+2025-01-13 20:45:47,477 - Server - DEBUG: New connection from 127.0.0.1:49854. Total connections: 1
+2025-01-13 20:45:47,477 - Server - INFO: Search query: 10;0;1;26;0;8;3;0; - STRING EXISTS Server Execution Time: 0.001077 ms
+2025-01-13 20:45:47,478 - Server - DEBUG: Query: '10;0;1;26;0;8;3;0;', IP: 127.0.0.1:49854, Server Round-trip Execution Time: 0.400808 ms
+2025-01-13 20:45:47,521 - Server - DEBUG: Connection from 127.0.0.1:49854 closed. Total connections: 0
+2025-01-13 20:45:47,546 - Server - DEBUG: New connection from 127.0.0.1:49862. Total connections: 1
+2025-01-13 20:45:47,547 - Server - INFO: Search query: non-existent-string - STRING NOT FOUND Server Execution Time: 0.000861 ms
+2025-01-13 20:45:47,548 - Server - DEBUG: Query: 'non-existent-string', IP: 127.0.0.1:49862, Server Round-trip Execution Time: 0.682791 ms
+2025-01-13 20:45:47,591 - Server - DEBUG: Connection from 127.0.0.1:49862 closed. Total connections: 0
+2025-01-13 20:45:48,972 - Server - DEBUG: New connection from 127.0.0.1:49864. Total connections: 1
+2025-01-13 20:45:48,972 - Server - INFO: Search query: 3;0;1;28;0;7;5;0; - STRING EXISTS Server Execution Time: 0.001692 ms
+2025-01-13 20:45:48,973 - Server - DEBUG: Query: '3;0;1;28;0;7;5;0;', IP: 127.0.0.1:49864, Server Round-trip Execution Time: 0.396582 ms
+2025-01-13 20:45:49,022 - Server - DEBUG: Connection from 127.0.0.1:49864 closed. Total connections: 0
+2025-01-13 20:45:49,048 - Server - DEBUG: New connection from 127.0.0.1:49872. Total connections: 1
+2025-01-13 20:45:49,048 - Server - INFO: Search query: 10;0;1;26;0;8;3;0; - STRING EXISTS Server Execution Time: 0.001149 ms
+2025-01-13 20:45:49,048 - Server - DEBUG: Query: '10;0;1;26;0;8;3;0;', IP: 127.0.0.1:49872, Server Round-trip Execution Time: 0.426950 ms
+2025-01-13 20:45:49,091 - Server - DEBUG: Connection from 127.0.0.1:49872 closed. Total connections: 0
+2025-01-13 20:45:49,115 - Server - DEBUG: New connection from 127.0.0.1:49888. Total connections: 1
+2025-01-13 20:45:49,116 - Server - INFO: Search query: non-existent-string - STRING NOT FOUND Server Execution Time: 0.000708 ms
+2025-01-13 20:45:49,116 - Server - DEBUG: Query: 'non-existent-string', IP: 127.0.0.1:49888, Server Round-trip Execution Time: 0.424678 ms
+2025-01-13 20:45:49,161 - Server - DEBUG: Connection from 127.0.0.1:49888 closed. Total connections: 0
+
+
+SSL=False, REREAD_ON_QUERY=True
+2025-01-13 20:46:49,454 - Server - DEBUG: New connection from 127.0.0.1:34284. Total connections: 1
+2025-01-13 20:46:49,472 - Server - INFO: Search query: 3;0;1;28;0;7;5;0; - STRING EXISTS Server Execution Time: 17.669810 ms
+2025-01-13 20:46:49,478 - Server - DEBUG: Query: '3;0;1;28;0;7;5;0;', IP: 127.0.0.1:34284, Server Round-trip Execution Time: 23.725183 ms
+2025-01-13 20:46:49,479 - Server - DEBUG: Connection from 127.0.0.1:34284 closed. Total connections: 0
+2025-01-13 20:46:49,480 - Server - DEBUG: New connection from 127.0.0.1:34300. Total connections: 1
+2025-01-13 20:46:49,499 - Server - INFO: Search query: 10;0;1;26;0;8;3;0; - STRING EXISTS Server Execution Time: 18.346417 ms
+2025-01-13 20:46:49,505 - Server - DEBUG: Query: '10;0;1;26;0;8;3;0;', IP: 127.0.0.1:34300, Server Round-trip Execution Time: 24.288375 ms
+2025-01-13 20:46:49,506 - Server - DEBUG: Connection from 127.0.0.1:34300 closed. Total connections: 0
+2025-01-13 20:46:49,507 - Server - DEBUG: New connection from 127.0.0.1:34314. Total connections: 1
+2025-01-13 20:46:49,530 - Server - INFO: Search query: non-existent-string - STRING NOT FOUND Server Execution Time: 22.022899 ms
+2025-01-13 20:46:49,535 - Server - DEBUG: Query: 'non-existent-string', IP: 127.0.0.1:34314, Server Round-trip Execution Time: 27.813567 ms
+2025-01-13 20:46:49,537 - Server - DEBUG: Connection from 127.0.0.1:34314 closed. Total connections: 0
+2025-01-13 20:46:50,313 - Server - DEBUG: New connection from 127.0.0.1:34328. Total connections: 1
+2025-01-13 20:46:50,329 - Server - INFO: Search query: 3;0;1;28;0;7;5;0; - STRING EXISTS Server Execution Time: 16.213834 ms
+2025-01-13 20:46:50,334 - Server - DEBUG: Query: '3;0;1;28;0;7;5;0;', IP: 127.0.0.1:34328, Server Round-trip Execution Time: 20.626115 ms
+2025-01-13 20:46:50,335 - Server - DEBUG: Connection from 127.0.0.1:34328 closed. Total connections: 0
+2025-01-13 20:46:50,335 - Server - DEBUG: New connection from 127.0.0.1:34340. Total connections: 1
+2025-01-13 20:46:50,353 - Server - INFO: Search query: 10;0;1;26;0;8;3;0; - STRING EXISTS Server Execution Time: 17.046248 ms
+2025-01-13 20:46:50,359 - Server - DEBUG: Query: '10;0;1;26;0;8;3;0;', IP: 127.0.0.1:34340, Server Round-trip Execution Time: 22.546101 ms
+2025-01-13 20:46:50,360 - Server - DEBUG: Connection from 127.0.0.1:34340 closed. Total connections: 0
+2025-01-13 20:46:50,360 - Server - DEBUG: New connection from 127.0.0.1:34356. Total connections: 1
+2025-01-13 20:46:50,380 - Server - INFO: Search query: non-existent-string - STRING NOT FOUND Server Execution Time: 19.580440 ms
+2025-01-13 20:46:50,386 - Server - DEBUG: Query: 'non-existent-string', IP: 127.0.0.1:34356, Server Round-trip Execution Time: 24.763804 ms
+2025-01-13 20:46:50,386 - Server - DEBUG: Connection from 127.0.0.1:34356 closed. Total connections: 0
+2025-01-13 20:46:51,557 - Server - DEBUG: New connection from 127.0.0.1:34360. Total connections: 1
+2025-01-13 20:46:51,574 - Server - INFO: Search query: 3;0;1;28;0;7;5;0; - STRING EXISTS Server Execution Time: 16.534157 ms
+2025-01-13 20:46:51,578 - Server - DEBUG: Query: '3;0;1;28;0;7;5;0;', IP: 127.0.0.1:34360, Server Round-trip Execution Time: 21.070300 ms
+2025-01-13 20:46:51,579 - Server - DEBUG: Connection from 127.0.0.1:34360 closed. Total connections: 0
+2025-01-13 20:46:51,580 - Server - DEBUG: New connection from 127.0.0.1:34376. Total connections: 1
+2025-01-13 20:46:51,597 - Server - INFO: Search query: 10;0;1;26;0;8;3;0; - STRING EXISTS Server Execution Time: 16.159379 ms
+2025-01-13 20:46:51,602 - Server - DEBUG: Query: '10;0;1;26;0;8;3;0;', IP: 127.0.0.1:34376, Server Round-trip Execution Time: 21.328322 ms
+2025-01-13 20:46:51,603 - Server - DEBUG: Connection from 127.0.0.1:34376 closed. Total connections: 0
+2025-01-13 20:46:51,604 - Server - DEBUG: New connection from 127.0.0.1:34378. Total connections: 1
+2025-01-13 20:46:51,630 - Server - INFO: Search query: non-existent-string - STRING NOT FOUND Server Execution Time: 26.021753 ms
+2025-01-13 20:46:51,636 - Server - DEBUG: Query: 'non-existent-string', IP: 127.0.0.1:34378, Server Round-trip Execution Time: 32.244955 ms
+2025-01-13 20:46:51,638 - Server - DEBUG: Connection from 127.0.0.1:34378 closed. Total connections: 0
+
+
+SSL=False, REREAD_ON_QUERY=False
+2025-01-13 20:47:37,370 - Server - DEBUG: New connection from 127.0.0.1:35002. Total connections: 1
+2025-01-13 20:47:37,371 - Server - INFO: Search query: 3;0;1;28;0;7;5;0; - STRING EXISTS Server Execution Time: 0.001184 ms
+2025-01-13 20:47:37,372 - Server - DEBUG: Query: '3;0;1;28;0;7;5;0;', IP: 127.0.0.1:35002, Server Round-trip Execution Time: 0.560700 ms
+2025-01-13 20:47:37,372 - Server - DEBUG: Connection from 127.0.0.1:35002 closed. Total connections: 0
+2025-01-13 20:47:37,373 - Server - DEBUG: New connection from 127.0.0.1:35018. Total connections: 1
+2025-01-13 20:47:37,373 - Server - INFO: Search query: 10;0;1;26;0;8;3;0; - STRING EXISTS Server Execution Time: 0.000881 ms
+2025-01-13 20:47:37,374 - Server - DEBUG: Query: '10;0;1;26;0;8;3;0;', IP: 127.0.0.1:35018, Server Round-trip Execution Time: 0.541991 ms
+2025-01-13 20:47:37,375 - Server - DEBUG: Connection from 127.0.0.1:35018 closed. Total connections: 0
+2025-01-13 20:47:37,375 - Server - DEBUG: New connection from 127.0.0.1:35022. Total connections: 1
+2025-01-13 20:47:37,376 - Server - INFO: Search query: non-existent-string - STRING NOT FOUND Server Execution Time: 0.000780 ms
+2025-01-13 20:47:37,376 - Server - DEBUG: Query: 'non-existent-string', IP: 127.0.0.1:35022, Server Round-trip Execution Time: 0.381509 ms
+2025-01-13 20:47:37,377 - Server - DEBUG: Connection from 127.0.0.1:35022 closed. Total connections: 0
+2025-01-13 20:47:38,123 - Server - DEBUG: New connection from 127.0.0.1:35028. Total connections: 1
+2025-01-13 20:47:38,123 - Server - INFO: Search query: 3;0;1;28;0;7;5;0; - STRING EXISTS Server Execution Time: 0.000850 ms
+2025-01-13 20:47:38,124 - Server - DEBUG: Query: '3;0;1;28;0;7;5;0;', IP: 127.0.0.1:35028, Server Round-trip Execution Time: 0.350924 ms
+2025-01-13 20:47:38,124 - Server - DEBUG: Connection from 127.0.0.1:35028 closed. Total connections: 0
+2025-01-13 20:47:38,125 - Server - DEBUG: New connection from 127.0.0.1:35032. Total connections: 1
+2025-01-13 20:47:38,126 - Server - INFO: Search query: 10;0;1;26;0;8;3;0; - STRING EXISTS Server Execution Time: 0.001144 ms
+2025-01-13 20:47:38,126 - Server - DEBUG: Query: '10;0;1;26;0;8;3;0;', IP: 127.0.0.1:35032, Server Round-trip Execution Time: 0.464876 ms
+2025-01-13 20:47:38,127 - Server - DEBUG: Connection from 127.0.0.1:35032 closed. Total connections: 0
+2025-01-13 20:47:38,128 - Server - DEBUG: New connection from 127.0.0.1:35038. Total connections: 1
+2025-01-13 20:47:38,128 - Server - INFO: Search query: non-existent-string - STRING NOT FOUND Server Execution Time: 0.000921 ms
+2025-01-13 20:47:38,129 - Server - DEBUG: Query: 'non-existent-string', IP: 127.0.0.1:35038, Server Round-trip Execution Time: 0.638500 ms
+2025-01-13 20:47:38,130 - Server - DEBUG: Connection from 127.0.0.1:35038 closed. Total connections: 0
+2025-01-13 20:47:38,792 - Server - DEBUG: New connection from 127.0.0.1:35046. Total connections: 1
+2025-01-13 20:47:38,793 - Server - INFO: Search query: 3;0;1;28;0;7;5;0; - STRING EXISTS Server Execution Time: 0.001103 ms
+2025-01-13 20:47:38,793 - Server - DEBUG: Query: '3;0;1;28;0;7;5;0;', IP: 127.0.0.1:35046, Server Round-trip Execution Time: 0.409766 ms
+2025-01-13 20:47:38,794 - Server - DEBUG: Connection from 127.0.0.1:35046 closed. Total connections: 0
+2025-01-13 20:47:38,795 - Server - DEBUG: New connection from 127.0.0.1:35058. Total connections: 1
+2025-01-13 20:47:38,795 - Server - INFO: Search query: 10;0;1;26;0;8;3;0; - STRING EXISTS Server Execution Time: 0.000800 ms
+2025-01-13 20:47:38,795 - Server - DEBUG: Query: '10;0;1;26;0;8;3;0;', IP: 127.0.0.1:35058, Server Round-trip Execution Time: 0.387819 ms
+2025-01-13 20:47:38,796 - Server - DEBUG: Connection from 127.0.0.1:35058 closed. Total connections: 0
+2025-01-13 20:47:38,796 - Server - DEBUG: New connection from 127.0.0.1:35066. Total connections: 1
+2025-01-13 20:47:38,797 - Server - INFO: Search query: non-existent-string - STRING NOT FOUND Server Execution Time: 0.000729 ms
+2025-01-13 20:47:38,797 - Server - DEBUG: Query: 'non-existent-string', IP: 127.0.0.1:35066, Server Round-trip Execution Time: 0.340225 ms
+2025-01-13 20:47:38,798 - Server - DEBUG: Connection from 127.0.0.1:35066 closed. Total connections: 0

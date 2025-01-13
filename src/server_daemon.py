@@ -95,7 +95,7 @@ LOG_FILE: str = os.getenv(
                  "server_daemon.log")
 )
 
-def validate_environment():
+def validate_environment() -> None:
     """
     Validates critical directories and logs warnings for any missing paths.
     """

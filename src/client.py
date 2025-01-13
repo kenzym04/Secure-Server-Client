@@ -90,7 +90,7 @@ os.makedirs(DEFAULT_LOG_DIR, exist_ok=True)
 os.makedirs(DEFAULT_CONFIG_DIR, exist_ok=True)
 os.makedirs(DEFAULT_DATA_DIR, exist_ok=True)
 
-def validate_environment():
+def validate_environment() -> None:
     """
     Validate the existence of critical directories required for the client.
 
@@ -330,7 +330,7 @@ def communicate(
         logger.info(
             f"Query: '{search_input}', "
             f"Response: '{server_reply}', "
-            f"Client-round-trip Time: {round_trip_time:.2f} ms"
+            f"Client-round-trip Time: {round_trip_time:.6f} ms"
         )
         return server_reply
     except socket.error as e:
