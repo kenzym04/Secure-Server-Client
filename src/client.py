@@ -120,6 +120,8 @@ def setup_logging() -> logging.Logger:
 
     os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 
+
+
     file_handler = RotatingFileHandler(
         LOG_FILE, maxBytes=10*1024*1024,
         backupCount=5
