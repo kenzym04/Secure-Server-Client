@@ -21,7 +21,8 @@ config.read(CONFIG_FILE)
 
 BASE_DIR = os.path.abspath(os.path.dirname(CONFIG_FILE))
 DATA_DIR = config.get("paths", "data_dir", fallback="src/data")
-RESULTS_CSV = os.path.join(BASE_DIR, DATA_DIR, "speed_test_results.csv")
+RESULTS_DIR = os.path.join(BASE_DIR, DATA_DIR, "results")
+RESULTS_CSV = os.path.join(RESULTS_DIR, "speed_test_results.csv")
 
 
 class TestServer(unittest.TestCase):
