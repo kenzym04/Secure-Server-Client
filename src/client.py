@@ -27,27 +27,63 @@ from logging.handlers import RotatingFileHandler
 config = configparser.ConfigParser()
 
 # Define dynamic paths
-SCRIPT_DIR: str = os.path.dirname(os.path.abspath(__file__))
+SCRIPT_DIR: str = os.path.dirname(
+    os.path.abspath(__file__)
+)
 BASE_DIR: str = os.path.dirname(SCRIPT_DIR)
-DEFAULT_LOG_DIR = os.getenv('LOG_DIR', os.path.join(BASE_DIR, "logs"))
-DEFAULT_CONFIG_DIR = os.getenv('CONFIG_PATH', os.path.join(BASE_DIR, "config"))
-DEFAULT_DATA_DIR = os.getenv('DATA_DIR', os.path.join(BASE_DIR, "data"))
+DEFAULT_LOG_DIR = os.getenv(
+    'LOG_DIR',
+    os.path.join(BASE_DIR, "logs")
+)
+DEFAULT_CONFIG_DIR = os.getenv(
+    'CONFIG_PATH',
+    os.path.join(BASE_DIR, "config")
+)
+DEFAULT_DATA_DIR = os.getenv(
+    'DATA_DIR',
+    os.path.join(BASE_DIR,
+                 "data")
+)
 
 # Configuration file path
-CONFIG_PATH = os.getenv('CONFIG_PATH', os.path.join(DEFAULT_CONFIG_DIR, "config.ini"))
+CONFIG_PATH = os.getenv(
+    'CONFIG_PATH',
+    os.path.join(DEFAULT_CONFIG_DIR,
+                 "config.ini")
+)
 if not os.path.exists(CONFIG_PATH):
-    raise FileNotFoundError(f"Configuration file not found: {CONFIG_PATH}")
+    raise FileNotFoundError(
+        f"Configuration file not found: {CONFIG_PATH}"
+    )
 
 config.read(CONFIG_PATH)
 
 # Log file path
-LOG_FILE = os.getenv('LOG_FILE', os.path.join(DEFAULT_LOG_DIR, "client.log"))
+LOG_FILE = os.getenv(
+    'LOG_FILE',
+    os.path.join(
+        DEFAULT_LOG_DIR,
+        "client.log")
+)
 
 # Data file path
-linuxpath = os.getenv('LINUX_PATH', config.get('server', 'linuxpath', fallback=os.path.join(DEFAULT_DATA_DIR, "200k.txt")))
+linuxpath = os.getenv(
+    'LINUX_PATH',
+    config.get(
+        'server',
+        'linuxpath',
+        fallback=os.path.join(
+            DEFAULT_DATA_DIR,
+            "200k.txt"))
+)
 
 # PID file path
-PID_FILE = os.getenv('PID_FILE', os.path.join(BASE_DIR, "server_daemon.pid"))
+PID_FILE = os.getenv(
+    'PID_FILE',
+    os.path.join(
+        BASE_DIR,
+        "server_daemon.pid")
+)
 
 # Ensure required directories exist
 os.makedirs(DEFAULT_LOG_DIR, exist_ok=True)
@@ -108,7 +144,9 @@ def setup_logging() -> logging.Logger:
 
 logger = setup_logging()
 
-def load_config(config_path: str) -> configparser.ConfigParser:
+def load_config(
+        config_path: str
+) -> configparser.ConfigParser:
     """
     Load configuration from a file.
 
@@ -123,7 +161,9 @@ def load_config(config_path: str) -> configparser.ConfigParser:
     """
     config_parser = configparser.ConfigParser()
     if not os.path.exists(config_path):
-        raise FileNotFoundError(f"Configuration file not found: {config_path}")
+        raise FileNotFoundError(
+            f"Configuration file not found: {config_path}"
+        )
     config_parser.read(config_path)
     return config_parser
 
@@ -184,8 +224,7 @@ def create_ssl_context() -> ssl.SSLContext:
     return context
 
 def send_search_query(search_input: str) -> Optional[str]:
-    """
-    Send a search query to the server and return the response, while measuring performance.
+    """Sends a search query to the server and returns its response.
 
     Args:
         search_input (str): The search query to send.

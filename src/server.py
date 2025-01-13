@@ -81,24 +81,7 @@ file_mmap = None
 
 def validate_environment():
     """
-    Validate the existence of critical directories required for the server.
-
-    This function checks the presence of directories and files needed for
-    the server's operation. If any path is missing, it logs a warning with
-    the corresponding description.
-
-    Paths validated:
-        - Configuration directory
-        - Log directory
-        - Certificate directory
-        - Data directory
-        - PID file directory
-
-    Logging:
-        Logs a warning for each missing path.
-
-    Returns:
-        None
+    Validates the existence of critical directories and logs warnings for any missing paths.
     """
     for path, description in [
         (DEFAULT_CONFIG_DIR, "Configuration directory"),
@@ -229,9 +212,17 @@ def load_and_validate_config() -> Dict[str, Any]:
     config = load_config(CONFIG_PATH)
 
     server_config: Dict[str, Any] = {
-        'host': config.get('server', 'host', fallback='127.0.0.1'),
+        'host': config.get(
+            'server',
+            'host',
+            fallback='127.0.0.1'
+        ),
         'port': config.getint('server', 'port', fallback=44444),
-        'ssl': config.getboolean('server', 'ssl', fallback=False),
+        'ssl': config.getboolean(
+            'server',
+            'ssl',
+            fallback=False
+        ),
         'cert_file': config.get(
             'server', 'cert_file',
             fallback='certs/server.crt'
@@ -258,9 +249,21 @@ def load_and_validate_config() -> Dict[str, Any]:
             'server', 'token_bucket_fill_rate',
             fallback=10.0
         ),
-        'file_path': config.get('server', 'file_path', fallback=FILE_RELATIVE_PATH),
-        'log_file': config.get('server', 'log_file', fallback=LOG_FILE),
-        'pid_file': config.get('server', 'pid_file', fallback='server_daemon.pid'),
+        'file_path': config.get(
+            'server',
+            'file_path',
+            fallback=FILE_RELATIVE_PATH
+        ),
+        'log_file': config.get(
+            'server',
+            'log_file',
+            fallback=LOG_FILE
+        ),
+        'pid_file': config.get(
+            'server',
+            'pid_file',
+            fallback='server_daemon.pid'
+        ),
     }
 
     # Type checking
@@ -437,7 +440,8 @@ def search_query(query: str) -> str:
 
     execution_time_ms = (end_time - start_time) / 1_000_000  # Convert ns to ms
 
-    logger.info(f"Search query: {query} - {result} Server Execution Time: {execution_time_ms:.2f} ms")
+    logger.info(f"Search query: {query} - {result} "
+                f"Server Execution Time: {execution_time_ms:.2f} ms")
 
     return result
 

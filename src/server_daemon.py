@@ -38,7 +38,7 @@ import signal
 import time
 import logging
 import threading
-from typing import Any, NoReturn
+from typing import Any
 from logging.handlers import RotatingFileHandler
 
 # Add the project root directory to the Python path
@@ -73,17 +73,32 @@ connection_count: int = 0
 connection_lock: threading.Lock = threading.Lock()
 
 # Dynamic Path Configuration
-DEFAULT_CONFIG_DIR = os.getenv('CONFIG_DIR', os.path.join(BASE_DIR, "config"))
+DEFAULT_CONFIG_DIR = os.getenv(
+    'CONFIG_DIR',
+    os.path.join(BASE_DIR,
+                 "config")
+)
 DEFAULT_LOG_DIR = os.getenv('LOG_DIR', os.path.join(BASE_DIR, "logs"))
 DEFAULT_PID_DIR = os.getenv('PID_DIR', BASE_DIR)
 SERVER_HOST = os.getenv('SERVER_HOST', '127.0.0.1')
 SERVER_PORT = int(os.getenv('SERVER_PORT', 44444))
 
 # Paths
-PID_FILE: str = os.getenv('PID_FILE', os.path.join(DEFAULT_PID_DIR, "server_daemon.pid"))
-LOG_FILE: str = os.getenv('LOG_FILE', os.path.join(DEFAULT_LOG_DIR, "server_daemon.log"))
+PID_FILE: str = os.getenv(
+    'PID_FILE',
+    os.path.join(DEFAULT_PID_DIR,
+                 "server_daemon.pid")
+)
+LOG_FILE: str = os.getenv(
+    'LOG_FILE',
+    os.path.join(DEFAULT_LOG_DIR,
+                 "server_daemon.log")
+)
 
 def validate_environment():
+    """
+    Validates critical directories and logs warnings for any missing paths.
+    """
     for path, description in [
         (DEFAULT_CONFIG_DIR, "Configuration directory"),
         (DEFAULT_LOG_DIR, "Log directory"),
@@ -128,8 +143,8 @@ def setup_logging() -> logging.Logger:
 
     return logger
 
-def signal_handler(signum: int, _: Any) -> NoReturn:
-    """Handle termination signals for graceful shutdown of the server daemon.
+def signal_handler(signum: int, _: Any) -> None:
+    """Handles termination signals to shut down the server daemon.
 
     Args:
         signum (int): The signal number received (e.g., 15 for SIGTERM).
@@ -143,6 +158,21 @@ def signal_handler(signum: int, _: Any) -> NoReturn:
         logger.info(f"Received signal {signum}. Shutting down...")
         logger.info("Server daemon stopped.")
     sys.exit(0)
+
+# Helper function to redirect standard file descriptors
+def redirect_standard_io() -> None:
+    """
+    Redirect standard I/O streams to /dev/null.
+    This is used to detach the daemon process from the terminal.
+    """
+    sys.stdout.flush()
+    sys.stderr.flush()
+    with open(os.devnull, 'r') as si, \
+         open(os.devnull, 'a+') as so, \
+         open(os.devnull, 'a+') as se:
+        os.dup2(si.fileno(), sys.stdin.fileno())
+        os.dup2(so.fileno(), sys.stdout.fileno())
+        os.dup2(se.fileno(), sys.stderr.fileno())
 
 def daemonize() -> None:
     """Daemonize the current process, turning it into a background daemon.
@@ -191,16 +221,6 @@ def daemonize() -> None:
     pid = os.getpid()
     with open(PID_FILE, 'w') as f:
         f.write(str(pid))
-
-    # Redirect standard file descriptors
-    sys.stdout.flush()
-    sys.stderr.flush()
-    with (open(os.devnull, 'r') as si,
-          open(os.devnull, 'a+') as so,
-          open(os.devnull, 'a+') as se):
-        os.dup2(si.fileno(), sys.stdin.fileno())
-        os.dup2(so.fileno(), sys.stdout.fileno())
-        os.dup2(se.fileno(), sys.stderr.fileno())
 
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
