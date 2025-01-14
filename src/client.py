@@ -120,7 +120,10 @@ def setup_logging() -> logging.Logger:
 
     os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 
-
+    # Ensure the log file exists
+    if not os.path.exists(LOG_FILE):
+        with open(LOG_FILE, 'w') as log_file:
+            log_file.write('')  # Create an empty log file if it doesn't exist
 
     file_handler = RotatingFileHandler(
         LOG_FILE, maxBytes=10*1024*1024,
