@@ -354,7 +354,13 @@ class PerformanceTest:
         time.sleep(1)  # Give some time for the file to be saved
 
         response = self.send_query(test_string)
-        self.assertIn(response.strip(), ["STRING EXISTS", "STRING NOT FOUND"])
+        self.assertIn(response.strip(), ["STRING EXISTS", "STRING NOT FOUND", "RATE_LIMITED"])
+
+        # If the response was rate limited, wait and try again
+        if response.strip() == "RATE_LIMITED":
+            time.sleep(1)  # Wait for rate limit to reset
+            response = self.send_query(test_string)
+            self.assertIn(response.strip(), ["STRING EXISTS", "STRING NOT FOUND"])
 
         # Remove the added string
         with open(self.config['linuxpath'], 'r') as f:
@@ -365,6 +371,12 @@ class PerformanceTest:
         time.sleep(1)  # Give some time for the file to be saved
 
         response_after_removal = self.send_query(test_string)
+
+        # If the response was rate limited, wait and try again
+        if response_after_removal.strip() == "RATE_LIMITED":
+            time.sleep(1)  # Wait for rate limit to reset
+            response_after_removal = self.send_query(test_string)
+
         self.assertEqual(response_after_removal.strip(), "STRING NOT FOUND")
 
         self.config['reread_on_query'] = original_reread

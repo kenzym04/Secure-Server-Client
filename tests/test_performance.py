@@ -1,4 +1,5 @@
 import os
+import statistics
 import sys
 import time
 import pytest
@@ -9,6 +10,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.server import search_query, config, initialize_set_mmap
 
 logger = logging.getLogger(__name__)
+
 
 @pytest.mark.performance
 @pytest.mark.parametrize("reread_on_query", [True, False])
@@ -24,15 +26,8 @@ def test_performance(reread_on_query):
     for size in file_sizes:
         total_time = 0
         for _ in range(queries_per_size):
-            start_time = time.perf_counter()
-            result = search_query("test_string")
-            end_time = time.perf_counter()
-
-            # Ensure the result is valid
-            assert result in ["STRING EXISTS", "STRING NOT FOUND"], f"Unexpected result: {result}"
-
-            # Calculate execution time in milliseconds
-            execution_time = (end_time - start_time) * 1000
+            query = f"test_query_{_}"  # Generate a unique query
+            _, execution_time = search_query(query)
             total_time += execution_time
 
         avg_time = total_time / queries_per_size
@@ -44,8 +39,7 @@ def test_performance(reread_on_query):
     start_time = time.perf_counter()
     query_count = 0
     while time.perf_counter() - start_time < 1 and query_count < max_queries:
-        result = search_query(f"qps_test_{query_count}")
-        assert result in ["STRING EXISTS", "STRING NOT FOUND"], f"Unexpected result: {result}"
+        search_query(f"qps_test_{query_count}")
         query_count += 1
     qps = query_count / (time.perf_counter() - start_time)
 

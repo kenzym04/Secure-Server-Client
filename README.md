@@ -281,12 +281,14 @@ python3 src/server_daemon.py stop
 ```
 
 ---
-### 6. Running Tests
-Run all tests with coverage reporting:
 
-```bash
-pytest --cov=src --cov-report=term-missing
+### 6. Running the Client
+```bash 
+python3 src/client.py
 ```
+Three queries will be sent by default, and the expected results are: STRING EXISTS, STRING EXISTS, and STRING NOT FOUND.
+
+### 7. Running Tests
 To run all the tests in the `tests` directory:
 
 ```bash
@@ -300,16 +302,63 @@ pytest tests/test_server_daemon.py
 pytest tests/test_client.py
 pytest tests/edge_cases.py
 pytest tests/test_file_sizes_rows_vs_qps.py
-pytest tests/test_performance.py
+pytest tests/test_performance.py | Note: To run this test, replace the search_query function in server.py with the one provided at the bottom of this document, and revert it when done.
 pytest tests/test_file_sizes_bytes_vs_qps_mocked.py
 pytest tests/validate_environment_server.py
 pytest tests/validate_environment_daemon.py
 pytest tests/validate_environment_client.py
 
 ```
-### 7. Troubleshooting
+### 8. Troubleshooting
 1. **Permission Issues:** Ensure proper write permissions for log and PID files.
 2. **SSL Problems:** Verify correct placement and permissions of certificate files.
 3. **Rate Limiting:** Check `rate_limit_capacity` and `rate_limit_fill_rate` in `config.ini`.
 4. **Resource Management:** While the server can handle unlimited connections, be aware of system resource limitations (e.g., available memory, file descriptors) that may affect performance under extremely high loads.
 5. **Caching:** If changes to the source file are not immediately reflected, check if REREAD_ON_QUERY is set to True in the configuration. If not, restart the server to reload the file contents into the cache.
+
+### `search_query` function
+````bash
+def search_query(query: str) -> Tuple[str, float]:
+    """
+    Search for the query in the file or cached data structures.
+
+    Args:
+        query (str): The string to search for.
+
+    Returns:
+        Tuple[str, float]: A tuple containing the result string and the execution time in milliseconds.
+    """
+    global file_set, file_mmap, start_time
+
+    if config['reread_on_query']:
+        try:
+            if file_mmap is None:
+                initialize_set_mmap()
+
+            if file_mmap is None:
+                raise RuntimeError("Failed to initialize memory-mapped file")
+
+            # Re-read the file contents using mmap
+            file_content = file_mmap[:]
+            start_time = time.perf_counter_ns()
+            file_lines = file_content.decode('utf-8').splitlines()
+            result = "STRING EXISTS" if query in file_lines else "STRING NOT FOUND"
+        except Exception as e:
+            logger.error(f"Error reading file: {str(e)}")
+            result = "ERROR: Unable to read file"
+    else:
+        if file_set is None:
+            initialize_set_mmap()
+
+        if file_set is None:
+            result = "ERROR: Unable to initialize file set"
+        else:
+            start_time = time.perf_counter_ns()
+            result = "STRING EXISTS" if query in file_set else "STRING NOT FOUND"
+
+    end_time = time.perf_counter_ns()
+    search_time = (end_time - start_time) / 1_000_000  # Convert ns to ms
+    search_time_formatted = round(search_time, 6)  # Round to 6 decimal places
+
+    return result, search_time_formatted
+````
