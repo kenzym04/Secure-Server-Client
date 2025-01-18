@@ -45,6 +45,11 @@ class TestServer(unittest.TestCase):
         sys.stdout.flush()
 
     def create_ssl_context(self):
+        use_ssl = self.config.get('ssl', True)
+        if isinstance(use_ssl, str):
+            use_ssl = use_ssl.lower() == 'true'
+        if not use_ssl:
+            return None
         context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE
@@ -216,10 +221,15 @@ class TestServer(unittest.TestCase):
 
     def test_ssl_connection(self):
         context = self.create_ssl_context()
-        with socket.create_connection((self.config['host'], self.config['port'])) as sock:
-            with context.wrap_socket(sock) as secure_sock:
-                secure_sock.sendall(b"test")
-                response = secure_sock.recv(1024).decode('utf-8')
+        host = self.config.get('host', 'localhost')
+        port = int(self.config.get('port', 44444))
+
+        with socket.create_connection((host, port)) as sock:
+            if context:
+                sock = context.wrap_socket(sock, server_hostname=host)
+            sock.sendall(b"test")
+            response = sock.recv(1024).decode('utf-8')
+
         self.assertIn(response.strip(), ["STRING EXISTS", "STRING NOT FOUND", "RATE_LIMITED"])
 
     def test_query_time_measurement(self):

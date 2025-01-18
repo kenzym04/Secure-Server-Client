@@ -6,7 +6,6 @@ import socket
 import configparser
 from mmap import mmap as mmap_func
 from unittest.mock import mock_open
-from unittest.mock import patch, mock_open as mock_open_function
 
 # Add the src directory to the Python path for importing the server module
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -188,6 +187,14 @@ def initialize_set_mmap() -> None:
         logger.error(f"Error initializing set and mmap: {str(e)}")
         file_set = set()
         file_mmap = None
+
+@pytest.fixture
+def mock_client_socket():
+    return MagicMock()
+
+@pytest.fixture
+def mock_ssl_context():
+    return MagicMock()
 
 def test_search_query():
     """
