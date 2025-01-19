@@ -17,7 +17,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.server import start_server, stop_daemon, load_and_validate_config, search_query, BASE_DIR, \
     cached_file_contents, setup_logging, handle_client, create_ssl_context, optimized_read_file, config, logger, \
     TokenBucket
-from src import client, server_daemon
+from src import client
 
 class TestServer(unittest.TestCase):
     @classmethod

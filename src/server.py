@@ -38,16 +38,19 @@ Key Features:
 This module adheres to PEP8 and PEP20 standards, is fully statically typed, and includes comprehensive logging and exception handling to ensure maintainability, clarity, and high performance.
 """
 
-import configparser
-import logging
+
 import os
 import signal
 import socket
 import ssl
 import sys
-import threading
 import time
+import logging
+import threading
+import configparser
 from mmap import mmap as mmap_func
+server_running = threading.Event()
+server_running.set()
 from logging.handlers import RotatingFileHandler
 from typing import Set, Dict, Any, Tuple, Optional
 
@@ -189,7 +192,6 @@ def setup_logging() -> None:
     logger.addHandler(console_handler)
     logger.debug(f"Using LOG_FILE: {LOG_FILE}")
     logger.debug(f"Using PID_FILE: {PID_FILE}")
-
 
 def load_config(config_path: str) -> configparser.ConfigParser:
     """
@@ -563,35 +565,30 @@ def handle_client(
             f"{client_address[0]}:{client_address[1]} closed. "
             f"Total connections: {connection_count}")
 
+def signal_handler(signum: int, _: Any) -> None:
+    """
+    Handle termination signals gracefully.
+    """
+    logger.info(f"Received signal {signum} to terminate. Initiating shutdown...")
+    server_running.clear()  # Signal all threads to stop
+    cleanup_resources()
+    logger.info("Server shutting down...")
+    sys.exit(0)
+
 def start_server(daemon_logger: Optional[logging.Logger] = None) -> None:
-    """
-    Initialize and run the server, handling client connections.
-
-    Args:
-        daemon_logger: Optional logger for daemon mode. If None, sets up a new logger.
-
-    This function:
-    - Sets up logging and initializes resources.
-    - Configures signal handlers for graceful shutdown.
-    - Creates and binds the server socket.
-    - Enters a loop to accept and handle client connections in separate threads.
-    - Performs cleanup on exit.
-
-    Raises:
-        Logs any exceptions occurring in the main server loop.
-    """
     global logger
     if daemon_logger:
         logger = daemon_logger
     else:
         setup_logging()
 
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGINT, signal_handler)
+    # Move signal handling to the main thread
+    if threading.current_thread() is threading.main_thread():
+        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGINT, signal_handler)
 
     server_socket = setup_server_socket(config['host'],
-                                        config['port'], config['ssl']
-                                        )
+                                        config['port'], config['ssl'])
     logger.info(f"Server started on {config['host']}:{config['port']}")
     logger.info(f"Using file: {config['linuxpath']}")
     logger.info(f"Reread on query: {config['reread_on_query']}")
@@ -609,7 +606,7 @@ def start_server(daemon_logger: Optional[logging.Logger] = None) -> None:
     finally:
         cleanup_resources()
         server_socket.close()
-        logger.info("Server shutting down.")
+        logger.info("Server shutting down complete.")
 
 def create_ssl_context() -> ssl.SSLContext:
     cert_file = os.getenv('SSL_CERT_FILE', os.path.join(DEFAULT_CERT_DIR, "server.crt"))
@@ -642,15 +639,6 @@ def setup_server_socket(ip: str, port: int, use_ssl: bool) -> socket.socket:
 
     return server_socket
 
-def signal_handler(signum: int, _: Any) -> None:
-    """
-    Handle termination signals gracefully.
-    """
-    logger.info(f"Received signal {signum} to terminate. Shutting down...")
-    cleanup_resources()
-    logger.info("Server shutdown complete.")
-    sys.exit(0)
-
 def stop_daemon() -> None:
     global logger
     logger.info("Stopping server daemon...")
@@ -677,4 +665,6 @@ def stop_daemon() -> None:
         logger.error(f"Error stopping daemon: {str(e)}")
 
 if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
     start_server()
