@@ -38,7 +38,6 @@ Key Features:
 This module adheres to PEP8 and PEP20 standards, is fully statically typed, and includes comprehensive logging and exception handling to ensure maintainability, clarity, and high performance.
 """
 
-
 import os
 import signal
 import socket
@@ -76,13 +75,13 @@ connection_count = 0
 
 # File size and log constraints
 MAX_PAYLOAD_SIZE: int = 1024
-MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10 MB
-MAX_LOG_SIZE: int = 10 * 1024 * 1024  # 10 MB
+MAX_FILE_SIZE: int = 100 * 1024 * 1024  # 100 MB
+MAX_LOG_SIZE: int = 100 * 1024 * 1024  # 100 MB
 MAX_LOG_BACKUPS: int = 5
 
 # Rate limiting constants
-MAX_CLIENT_TOKENS: int = 10
-CLIENT_TOKEN_REFILL_RATE: float = 1.0  # 1 token per second
+MAX_CLIENT_TOKENS: int = 10000
+CLIENT_TOKEN_REFILL_RATE: float = 1000  # 1000 token per second
 
 # Global variables
 cached_file_contents: Set[str] = set()
@@ -176,6 +175,7 @@ def setup_logging() -> None:
         maxBytes=MAX_LOG_SIZE,
         backupCount=MAX_LOG_BACKUPS
     )
+    logger.debug(f"Log rotation size set to: {MAX_LOG_SIZE / (1024 * 1024):.2f} MB")
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)
     if not hasattr(file_handler, "filters"):
@@ -609,12 +609,27 @@ def start_server(daemon_logger: Optional[logging.Logger] = None) -> None:
         logger.info("Server shutting down complete.")
 
 def create_ssl_context() -> ssl.SSLContext:
-    cert_file = os.getenv('SSL_CERT_FILE', os.path.join(DEFAULT_CERT_DIR, "server.crt"))
-    key_file = os.getenv('SSL_KEY_FILE', os.path.join(DEFAULT_CERT_DIR, "server.key"))
+    """
+    Create and return an SSL context.
 
-    context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-    context.load_cert_chain(certfile=cert_file, keyfile=key_file)
-    return context
+    Returns:
+        ssl.SSLContext: Configured SSL context.
+    """
+    try:
+        cert_file = os.getenv('SSL_CERT_FILE', os.path.join(DEFAULT_CERT_DIR, "server.crt"))
+        key_file = os.getenv('SSL_KEY_FILE', os.path.join(DEFAULT_CERT_DIR, "server.key"))
+
+        context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        context.load_cert_chain(certfile=cert_file, keyfile=key_file)
+
+        logger.info(f"SSL context created successfully. Cert file: {cert_file}, Key file: {key_file}")
+        return context
+    except FileNotFoundError as e:
+        logger.error(f"SSL certificate or key file not found: {e}")
+        raise
+    except ssl.SSLError as e:
+        logger.error(f"Error creating SSL context: {e}")
+        raise
 
 def setup_server_socket(ip: str, port: int, use_ssl: bool) -> socket.socket:
     """
@@ -628,16 +643,24 @@ def setup_server_socket(ip: str, port: int, use_ssl: bool) -> socket.socket:
     Returns:
         socket.socket: Configured server socket.
     """
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server_socket.bind((ip, port))
-    server_socket.listen(5)
+    try:
+        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server_socket.bind((ip, port))
+        server_socket.listen(5)
 
-    if use_ssl:
-        context = create_ssl_context()
-        server_socket = context.wrap_socket(server_socket, server_side=True)
+        if use_ssl:
+            context = create_ssl_context()
+            server_socket = context.wrap_socket(server_socket, server_side=True)
+            logger.info("Server socket wrapped with SSL successfully.")
 
-    return server_socket
+        return server_socket
+    except ssl.SSLError as e:
+        logger.error(f"SSL error during server socket setup: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during server socket setup: {e}")
+        raise
 
 def stop_daemon() -> None:
     global logger

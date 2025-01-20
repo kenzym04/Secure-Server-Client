@@ -203,12 +203,21 @@ For specific test result metrics, refer to the **Comprehensive Speed Report**. F
          - Argument validation and invalid input handling.
 
     4. **`tests/edge_cases.py`**  
-       - Covers edge cases such as:
-         - File reloading and size variations.
-         - Handling of payload limits, long queries, Unicode, and special characters.
-         - SQL injection-like queries to test security robustness.
-         - Concurrency and rate-limiting under simultaneous client requests.
-         - SSL and secure connection tests.
+    - Covers edge cases such as:
+      - File reloading and size variations.
+      - Handling of payload limits, long queries, Unicode, and special characters.
+      - SQL injection-like queries to test security robustness.
+      - Concurrency and rate-limiting under simultaneous client requests.
+      - SSL and secure connection tests.
+      - Server memory usage monitoring:
+        - Tracks memory consumption during multiple query operations.
+        - Ensures memory increase stays within acceptable limits (< 10 MB).
+      - Server CPU usage monitoring:
+        - Measures CPU utilization during server operations.
+        - Verifies CPU usage remains below 80% threshold.
+      - Performance reporting:
+        - Logs memory and CPU usage metrics for analysis.
+        - Provides real-time feedback on server resource consumption.
 
     5. **`tests/test_performance.py`**  
        - Validates system performance, including:
