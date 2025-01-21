@@ -321,6 +321,7 @@ pytest tests/validate_environment_client.py
 ### 8. Troubleshooting
 1. **Permission Issues:** Ensure proper write permissions for log and PID files.
 2. **SSL Problems:** Verify correct placement and permissions of certificate files.
+     run: ```openssl s_client -connect localhost:44444 -tls1_2```
 3. **Rate Limiting:** Check `rate_limit_capacity` and `rate_limit_fill_rate` in `config.ini`.
 4. **Resource Management:** While the server can handle unlimited connections, be aware of system resource limitations (e.g., available memory, file descriptors) that may affect performance under extremely high loads.
 5. **Caching:** If changes to the source file are not immediately reflected, check if REREAD_ON_QUERY is set to True in the configuration. If not, restart the server to reload the file contents into the cache.

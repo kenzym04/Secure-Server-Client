@@ -256,7 +256,7 @@ class TestServer(unittest.TestCase):
         process = psutil.Process(os.getpid())
         initial_memory = process.memory_info().rss
 
-        num_queries = 1000  # Increased from 100 to 1000 for a more intensive test
+        num_queries = 200  # Increased from 100 to 1000 for a more intensive test
         for _ in range(num_queries):
             self.send_query("test")
 

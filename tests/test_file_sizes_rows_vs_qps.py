@@ -95,8 +95,8 @@ class TestServerPerformance(TestServer):
             if total_time > 1.0:  # Stop if query execution exceeds 1 second
                 print("Server unable to handle additional load.")
     def test_file_sizes_vs_qps(self):
-        file_sizes = [10_000, 100_000, 250_000, 500_000, 1_000_000, 1_000_000_000]
-        max_queries = 1000  # Reduced from 10000 to 1000 for faster testing
+        file_sizes = [10_000, 100_000, 250_000, 500_000, 1_000_000, 100_000_000, 500_000_000, 1_000_000_000]
+        max_queries = 1000
         results = {}
 
         for file_size in file_sizes:

@@ -224,6 +224,8 @@ def create_ssl_context() -> ssl.SSLContext:
         ssl.SSLContext: Configured SSL context.
     """
     context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    context.maximum_version = ssl.TLSVersion.TLSv1_3
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE  # Accept self-signed cert
     return context
@@ -240,14 +242,38 @@ def send_search_query(search_input: str) -> Optional[str]:
     start_time = time.time()
     response = None
     try:
-        response = establish_connection_and_communicate(
-            search_input, start_time
-        )
+        # Establish connection and communicate with the server
+        sock = socket.create_connection((SERVER_IP, SERVER_PORT), timeout=10)
+        try:
+            if USE_SSL:
+                context = create_ssl_context()
+                with context.wrap_socket(sock, server_hostname=SERVER_IP) as secure_sock:
+                    secure_sock.sendall(search_input.encode('utf-8'))
+                    response = secure_sock.recv(1024).decode('utf-8').strip()
+            else:
+                sock.sendall(search_input.encode('utf-8'))
+                response = sock.recv(1024).decode('utf-8').strip()
+
+            # Handle empty responses
+            if not response:
+                logger.warning(f"Empty response received for query: '{search_input}'")
+                return "EMPTY_RESPONSE"
+        except socket.error as e:
+            logger.error(f"Socket error during communication: {str(e)}")
+            return f"CONNECTION_ERROR: {str(e)}"
+        finally:
+            sock.close()
+
     except Exception as error:
+        # Handle connection errors with detailed logging
         handle_connection_error(error)
     finally:
+        # Log failed queries if no response was received
         if response is None:
             log_failed_query(search_input, start_time)
+        else:
+            execution_time = (time.time() - start_time) * 1000  # Convert to milliseconds
+            logger.info(f"Query '{search_input}' completed in {execution_time:.2f} ms.")
 
     return response
 
@@ -268,6 +294,7 @@ def establish_connection_and_communicate(
         ConnectionRefusedError: If the connection is refused.
         Exception: For any other unexpected errors.
     """
+    global sock
     try:
         sock = socket.create_connection((
             SERVER_IP, SERVER_PORT), timeout=10

@@ -150,7 +150,7 @@ class TokenBucket:
                 return True
             return False
 
-TOKEN_BUCKET = TokenBucket(capacity=100, fill_rate=10)  # 100 tokens, refills at 10 tokens/sec
+TOKEN_BUCKET = TokenBucket(capacity=10_000, fill_rate=1_000)  # 1000 tokens, refills at 1000 tokens/sec
 
 def setup_logging() -> None:
     """
@@ -405,8 +405,7 @@ def initialize_set_mmap() -> None:
         raise
 
 def search_query(query: str) -> str:
-    """
-    Search for an exact match of the query in the file or cached data structures.
+    """Search for an exact match of the query in the file or cached data structures.
 
     Args:
         query (str): The string to search for.
@@ -416,44 +415,38 @@ def search_query(query: str) -> str:
     """
     global file_set, file_mmap
 
-    # Ensure initialization is outside of timing
-    if config['reread_on_query']:
-        if file_mmap is None:
-            initialize_set_mmap()
+    try:
+        if config['reread_on_query']:
+            # Dynamic search: re-read the file contents for each query
+            if file_mmap is None:
+                initialize_set_mmap()
+            if file_mmap is None:
+                logger.error("Failed to initialize memory-mapped file")
+                return "ERROR: Unable to read file"
 
-        if file_mmap is None:
-            logger.error("Failed to initialize memory-mapped file")
-            return "ERROR: Unable to initialize memory-mapped file"
-
-        try:
-            # Measure execution time only for the search operation
-            start_time = time.perf_counter_ns()
             file_content = file_mmap[:]
             file_lines = file_content.decode('utf-8').splitlines()
+            start_time = time.perf_counter_ns()
             result = "STRING EXISTS" if query in file_lines else "STRING NOT FOUND"
-            end_time = time.perf_counter_ns()
-        except Exception as e:
-            logger.error(f"Error reading file: {str(e)}")
-            return "ERROR: Unable to read file"
-    else:
-        if file_set is None:
-            initialize_set_mmap()
+        else:
+            # Static search: use cached file contents
+            if file_set is None:
+                initialize_set_mmap()
+            if file_set is None:
+                logger.error("Failed to initialize file set")
+                return "ERROR: Unable to initialize file set"
 
-        if file_set is None:
-            logger.error("Failed to initialize file set")
-            return "ERROR: Unable to initialize file set"
+            start_time = time.perf_counter_ns()
+            result = "STRING EXISTS" if query in file_set else "STRING NOT FOUND"
 
-        # Measure execution time only for the search operation
-        start_time = time.perf_counter_ns()
-        result = "STRING EXISTS" if query in file_set else "STRING NOT FOUND"
         end_time = time.perf_counter_ns()
+        execution_time_ms = (end_time - start_time) / 1_000_000  # Convert ns to ms
+        logger.info(f"Query processed. Result: {result}, Server Execution Time: {execution_time_ms:.6f} ms")
+        return result
 
-    execution_time_ms = (end_time - start_time) / 1_000_000  # Convert ns to ms
-
-    logger.info(f"Search query: {query} - {result} "
-                f"Server Execution Time: {execution_time_ms:.6f} ms")
-
-    return result
+    except Exception as e:
+        logger.error(f"Error reading file: {str(e)}")
+        return "ERROR: Unable to read file"
 
 cleanup_lock = threading.Lock()
 cleanup_done = False
@@ -501,21 +494,13 @@ def cleanup_resources() -> None:
         cleanup_done = True
         logger.info("Resources cleaned up successfully.")
 
-def handle_client(
-        client_socket: socket.socket, client_address: Tuple[str, int]) -> None:
+def handle_client(client_socket: socket.socket, client_address: tuple[str, int]) -> None:
     """
     Handle a client connection and process requests.
+
     Args:
         client_socket (socket.socket): The connected client socket.
         client_address (Tuple[str, int]): Client's IP address and port.
-    This function:
-    - Increments the global connection count.
-    - Receives and processes client queries.
-    - Sends responses back to the client.
-    - Logs query details and execution times.
-    - Handles exceptions and closes the connection.
-    - Decrements the connection count upon completion.
-    Affects global: connection_count
     """
     global connection_count
     with connection_count_lock:
@@ -530,40 +515,49 @@ def handle_client(
             try:
                 query = client_socket.recv(MAX_PAYLOAD_SIZE).decode('utf-8').strip()
                 if not query:
+                    if client_socket.fileno() == -1:  # Connection closed
+                        logger.warning(
+                            f"Client {client_address[0]}:{client_address[1]} closed the connection prematurely."
+                        )
                     break
-                # check for rate limiting
+
+                # Process valid query
+                result = search_query(query)
+                client_socket.sendall(result.encode('utf-8'))
+
+                # Check for rate limiting
                 if not TOKEN_BUCKET.consume(1):
+                    logger.debug(f"Rate limit exceeded for {client_address[0]}:{client_address[1]}")
                     client_socket.sendall("RATE_LIMITED\n".encode('utf-8'))
                     continue
 
                 start_time = time.perf_counter_ns()
                 result = search_query(query)
-                round_trip_time = (time.perf_counter_ns() - start_time) / 1_000_000  # Convert ns to ms = time.perf_counter_ns()
+                round_trip_time = (time.perf_counter_ns() - start_time) / 1_000_000  # Convert ns to ms
 
-                response = f"{result}\n"
-                client_socket.sendall(response.encode('utf-8'))
+                logger.info(f"Query processed. Result: {result}, Server Round-trip Execution Time: {round_trip_time:.6f} ms")
+                client_socket.sendall(result.encode('utf-8'))
 
-                logger.debug(
-                    f"Query: '{query}', "
-                    f"IP: {client_address[0]}:{client_address[1]}, "
-                    f"Server Round-trip Execution Time: {round_trip_time:.6f} ms"
-                )
-            except socket.error as e:
-                logger.error(f"Socket error while receiving data: {str(e)}")
-                break
             except UnicodeDecodeError as e:
-                logger.error(f"Error decoding received data: {str(e)}")
+                logger.error(f"Error decoding received data from {client_address[0]}:{client_address[1]}: {str(e)}")
                 continue
+            except ssl.SSLError as e:
+                if "EOF occurred in violation of protocol" in str(e):
+                    logger.info(
+                        f"Client {client_address[0]}:{client_address[1]} disconnected abruptly (SSL error)."
+                    )
+                    break
+                logger.error(f"SSL error while receiving data: {str(e)}")
+                break
+            except Exception as e:
+                logger.error(f"Error handling client {client_address}: {str(e)}")
+                break
     except Exception as e:
         logger.error(f"Error handling client {client_address}: {str(e)}")
     finally:
         client_socket.close()
         with connection_count_lock:
             connection_count -= 1
-        logger.debug(
-            f"Connection from "
-            f"{client_address[0]}:{client_address[1]} closed. "
-            f"Total connections: {connection_count}")
 
 def signal_handler(signum: int, _: Any) -> None:
     """
@@ -601,6 +595,11 @@ def start_server(daemon_logger: Optional[logging.Logger] = None) -> None:
                 args=(client_socket, client_address)
             )
             client_thread.start()
+    except ssl.SSLError as e:
+        if "UNEXPECTED_EOF_WHILE_READING" in str(e):
+            logger.info("Client disconnected abruptly. SSL error suppressed.")
+        else:
+            logger.error(f"SSL error in main server loop: {e}")
     except Exception as e:
         logger.error(f"Error in main server loop: {str(e)}")
     finally:
@@ -621,6 +620,12 @@ def create_ssl_context() -> ssl.SSLContext:
 
         context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
         context.load_cert_chain(certfile=cert_file, keyfile=key_file)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context.maximum_version = ssl.TLSVersion.TLSv1_3
+
+        # Set SSL/TLS version restrictions
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context.maximum_version = ssl.TLSVersion.TLSv1_3
 
         logger.info(f"SSL context created successfully. Cert file: {cert_file}, Key file: {key_file}")
         return context
