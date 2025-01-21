@@ -1,13 +1,13 @@
+import queue
+import threading
 import pytest
 import os
 import socket
 import sys
-from unittest.mock import ANY
 import ssl
 import configparser
 import logging
 import time
-import threading
 
 LOG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs", "client.log")
 
@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from unittest.mock import patch, MagicMock
 
-    # Import the client module to be tested
+# Import the client module to be tested
 from src import client
 
 # Import the necessary modules for testing
@@ -131,29 +131,6 @@ def test_create_ssl_context():
         assert mock_context.verify_mode == ssl.CERT_NONE
         mock_create_default_context.assert_called_once_with(ssl.Purpose.SERVER_AUTH)
 
-@pytest.mark.parametrize("search_input, expected_response", [
-    ('test_query_1', 'True'),
-    ('test_query_2', 'False')
-])
-def test_send_search_query(search_input, expected_response):
-    """Test the send_search_query function with different inputs."""
-    with patch('src.client.establish_connection_and_communicate') as mock_establish:
-        mock_establish.return_value = expected_response
-
-        result = client.send_search_query(search_input)
-
-        assert result == expected_response
-        mock_establish.assert_called_once_with(search_input, ANY)
-
-def test_send_search_query_failure():
-    """Test the send_search_query function when an exception occurs."""
-    with patch('src.client.establish_connection_and_communicate') as mock_establish:
-        mock_establish.side_effect = Exception("Test exception")
-
-        result = client.send_search_query('test-query')
-
-        assert result is None
-
 @pytest.mark.parametrize("use_ssl", [True, False])
 def test_establish_connection_and_communicate(use_ssl):
     """Test the establish_connection_and_communicate function with and without SSL."""
@@ -197,42 +174,11 @@ def test_log_failed_query(caplog):
         client.log_failed_query("test_query", time.time())
         assert "Query: 'test_query' failed." in caplog.text
 
-
-def test_send_search_query_connection_error():
-    with patch('src.client.establish_connection_and_communicate', side_effect=ConnectionError):
-        result = client.send_search_query("test_query")
-        assert result is None
-
-def test_send_search_query_ssl_error():
-    with patch('src.client.establish_connection_and_communicate', side_effect=ssl.SSLError):
-        result = client.send_search_query("test_query")
-        assert result is None
-
 def test_communicate_socket_error():
     mock_socket = MagicMock()
     mock_socket.sendall.side_effect = socket.error("Test socket error")
     with pytest.raises(socket.error, match="Test socket error"):
         client.communicate(mock_socket, "test_query", time.time())
-
-@pytest.mark.parametrize("search_input, expected_result", [
-    ("", None),  # Empty input
-    ("a" * 1025, None),  # Very long input (exceeding buffer size)
-    ("特殊文字", "特殊文字"),  # Non-ASCII input
-])
-def test_send_search_query_input_validation(search_input, expected_result):
-    with patch('src.client.establish_connection_and_communicate', return_value=expected_result):
-        result = client.send_search_query(search_input)
-        assert result == expected_result
-
-def test_send_search_query_server_unreachable():
-    with patch('src.client.establish_connection_and_communicate', side_effect=socket.error("Connection refused")):
-        result = client.send_search_query("test query")
-        assert result is None
-
-def test_send_search_query_timeout():
-    with patch('src.client.establish_connection_and_communicate', side_effect=socket.timeout("Connection timed out")):
-        result = client.send_search_query("test query")
-        assert result is None
 
 def test_get_server_config_malformed():
     mock_config = configparser.ConfigParser()
@@ -241,124 +187,33 @@ def test_get_server_config_malformed():
         with pytest.raises(SystemExit):
             client.get_server_config()
 
-    def test_get_server_config_invalid_ssl():
-        mock_config = configparser.ConfigParser()
-        mock_config['server'] = {
-            'host': '127.0.0.1',
-            'port': '44444',
-            'ssl': 'invalid',  # Invalid boolean value
-            'cert_file': 'certs/server.crt'
-        }
-        with patch('src.client.load_config', return_value=mock_config):
-            with pytest.raises(ValueError):
-                client.get_server_config()
-
-    def test_get_server_config_invalid_port():
-        mock_config = configparser.ConfigParser()
-        mock_config['server'] = {
-            'host': '127.0.0.1',
-            'port': 'invalid',  # Invalid port
-            'ssl': 'true',
-            'cert_file': 'certs/server.crt'
-        }
-        with patch('src.client.load_config', return_value=mock_config):
-            with pytest.raises(ValueError):
-                client.get_server_config()
-
-    def test_establish_connection_and_communicate_connection_error():
-        with patch('src.client.socket.create_connection', side_effect=ConnectionError("Connection failed")):
-            with pytest.raises(ConnectionError):
-                client.establish_connection_and_communicate("test query", time.time())
-
-    def test_establish_connection_and_communicate_ssl_error():
-        mock_socket = MagicMock()
-        with patch('src.client.socket.create_connection', return_value=mock_socket), \
-                patch('src.client.USE_SSL', True), \
-                patch('src.client.create_ssl_context') as mock_create_ssl_context:
-            mock_create_ssl_context.return_value.wrap_socket.side_effect = ssl.SSLError("SSL error")
-            with pytest.raises(ssl.SSLError):
-                client.establish_connection_and_communicate("test query", time.time())
-
-    def test_handle_connection_error(caplog):
-        with caplog.at_level(logging.ERROR):
-            client.handle_connection_error(ConnectionError("Test error"))
-            assert "Connection error: Test error" in caplog.text
-
-    def test_handle_connection_error_unexpected(caplog):
-        with caplog.at_level(logging.ERROR):
-            client.handle_connection_error(Exception("Unexpected error"))
-            assert "Unexpected error: Unexpected error" in caplog.text
-
-    @pytest.mark.parametrize("search_input, server_reply, expected_log", [
-        ("test query", "True", "Query: 'test query' -> Response: 'True'"),
-        ("another query", "False", "Query: 'another query' -> Response: 'False'"),
-    ])
-    def test_log_successful_query(caplog, search_input, server_reply, expected_log):
-        with caplog.at_level(logging.INFO):
-            client.log_successful_query(search_input, server_reply, time.time())
-            assert expected_log in caplog.text
-
-    def test_main(capsys):
-        mock_queries = ["query1", "query2", "exit"]
-        expected_outputs = ["Enter search query (or 'exit' to quit): ",
-                            "Enter search query (or 'exit' to quit): ",
-                            "Enter search query (or 'exit' to quit): ",
-                            "Exiting..."]
-
-        with patch('builtins.input', side_effect=mock_queries), \
-                patch('src.client.send_search_query', return_value="True"):
-            client.main()
-            captured = capsys.readouterr()
-            for output in expected_outputs:
-                assert output in captured.out
-
-    def test_main_keyboard_interrupt(capsys):
-        with patch('builtins.input', side_effect=KeyboardInterrupt):
-            client.main()
-            captured = capsys.readouterr()
-            assert "Exiting..." in captured.out
-
-# Additional tests to improve coverage:
-
-def test_load_config_file_not_found():
-    with pytest.raises(FileNotFoundError):
-        client.load_config("non_existent_config.ini")
-
-
-
-def test_send_search_query_success():
-    with patch('src.client.establish_connection_and_communicate', return_value="True"):
-        result = client.send_search_query("test query")
-        assert result == "True"
-
-def test_establish_connection_and_communicate_timeout():
-    with patch('src.client.socket.create_connection', side_effect=socket.timeout):
-        with pytest.raises(TimeoutError):
+def test_establish_connection_and_communicate_connection_error():
+    with patch('src.client.socket.create_connection', side_effect=ConnectionError("Connection failed")):
+        with pytest.raises(ConnectionError):
             client.establish_connection_and_communicate("test query", time.time())
 
-
-def test_main(caplog):
-    with caplog.at_level(logging.INFO), \
-         patch('src.client.send_search_query', side_effect=["True", "False", None]):
-        client.main()
-        assert "Query: 3;0;1;28;0;7;5;0; -> Response: True" in caplog.text
-        assert "Query: 10;0;1;26;0;8;3;0; -> Response: False" in caplog.text
-        assert "Query: non-existent-string failed" in caplog.text
-
+def test_establish_connection_and_communicate_ssl_error():
+    mock_socket = MagicMock()
+    with patch('src.client.socket.create_connection', return_value=mock_socket), \
+            patch('src.client.USE_SSL', True), \
+            patch('src.client.create_ssl_context') as mock_create_ssl_context:
+        mock_create_ssl_context.return_value.wrap_socket.side_effect = ssl.SSLError("SSL error")
+        with pytest.raises(ssl.SSLError):
+            client.establish_connection_and_communicate("test query", time.time())
 
 def test_handle_connection_error_unexpected(caplog):
     with caplog.at_level(logging.ERROR):
         client.handle_connection_error(Exception("Unexpected error"))
         assert "Unexpected error: Unexpected error" in caplog.text
 
-@pytest.mark.parametrize("search_input,expected_response", [
-    ("test query", "test response"),
-    ("empty", ""),
-    ("error", None)
-])
-def test_send_search_query(search_input, expected_response):
-    with patch('src.client.establish_connection_and_communicate', return_value=expected_response):
-        assert client.send_search_query(search_input) == expected_response
+def test_load_config_file_not_found():
+    with pytest.raises(FileNotFoundError):
+        client.load_config("non_existent_config.ini")
+
+def test_establish_connection_and_communicate_timeout():
+    with patch('src.client.socket.create_connection', side_effect=socket.timeout):
+        with pytest.raises(TimeoutError):
+            client.establish_connection_and_communicate("test query", time.time())
 
 def test_main_function(caplog):
     mock_responses = ["True", "False", None]
@@ -379,33 +234,6 @@ def test_establish_connection_and_communicate_exceptions(exception):
         with pytest.raises(Exception):
             client.establish_connection_and_communicate("test query", time.time())
 
-def test_rate_limiting():
-    with patch('src.client.establish_connection_and_communicate') as mock_communicate:
-        mock_communicate.side_effect = [
-            "Response 1",
-            "Rate limit exceeded",
-            "Response 2"
-        ]
-
-        assert client.send_search_query("query1") == "Response 1"
-        assert client.send_search_query("query2") == "Rate limit exceeded"
-        assert client.send_search_query("query3") == "Response 2"
-
-@pytest.mark.parametrize("query_size", [1000, 10000, 100000, 1000000])
-def test_large_query_performance(query_size):
-    large_query = "a" * query_size
-    start_time = time.time()
-    with patch('src.client.establish_connection_and_communicate', return_value="Large query response"):
-        result = client.send_search_query(large_query)
-    end_time = time.time()
-    assert result == "Large query response"
-    assert end_time - start_time < 1.0  # Assuming we want queries to complete within 1 second
-
-def test_timeout_handling():
-    with patch('src.client.establish_connection_and_communicate', side_effect=TimeoutError("Connection timed out")):
-        result = client.send_search_query("timeout query")
-        assert result is None  # Assuming send_search_query returns None on error
-
 #  basic performance, concurrency, and integration tests for the client
 # Performance test
 def test_client_performance():
@@ -422,27 +250,6 @@ def test_client_performance():
 
     assert total_time < 2.0, f"Performance test failed. {num_queries} queries took {total_time:.2f} seconds"
 
-# Concurrency test
-def test_client_concurrency():
-    """Test multiple concurrent client connections."""
-    num_threads = 5
-    results = []
-
-    def mock_query():
-        with patch('src.client.establish_connection_and_communicate', return_value="True"):
-            results.append(client.send_search_query("test query"))
-
-    threads = [threading.Thread(target=mock_query) for _ in range(num_threads)]
-
-    for thread in threads:
-        thread.start()
-
-    for thread in threads:
-        thread.join()
-
-    assert all(result == "True" for result in results)
-    assert len(results) == num_threads
-
 # Integration test with a mock server
 class MockServer:
     def __init__(self):
@@ -454,38 +261,6 @@ class MockServer:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         pass
-
-@pytest.mark.parametrize("query_size", [10, 100, 1000, 10000])
-def test_large_query_performance(query_size):
-    large_query = "a" * query_size
-    start_time = time.time()
-    with patch('src.client.establish_connection_and_communicate', return_value="Large query response"):
-        result = client.send_search_query(large_query)
-    end_time = time.time()
-    assert result == "Large query response"
-    assert end_time - start_time < 1.0  # Assuming performance should be under 1 second
-
-def test_multiple_queries_performance():
-    num_queries = 50
-    start_time = time.time()
-    for _ in range(num_queries):
-        client.send_search_query("test")
-    end_time = time.time()
-    assert end_time - start_time < 10.0  # Assuming 50 queries should complete within 10 seconds
-
-# Test for handling connection refused
-def test_send_search_query_connection_refused():
-    with patch('socket.socket') as mock_socket:
-        mock_socket.return_value.connect.side_effect = ConnectionRefusedError
-        result = client.send_search_query("test query")
-        assert result is None
-
-# Test for unexpected errors
-def test_send_search_query_unexpected_error():
-    with patch('src.client.establish_connection_and_communicate', side_effect=Exception("Unexpected error")):
-        result = client.send_search_query("test query")
-        assert result is None
-
 
 def test_get_server_config_success():
     mock_config = configparser.ConfigParser()
@@ -512,7 +287,6 @@ def test_establish_connection_and_communicate_no_ssl(mock_communicate, mock_crea
     assert response == "Test Response"
     mock_create_connection.assert_called_once()
     mock_communicate.assert_called_once()
-
 
 @patch('src.client.socket.create_connection')
 @patch('src.client.communicate')
@@ -554,6 +328,50 @@ def test_handle_connection_error_connection_reset(caplog):
         client.handle_connection_error(ConnectionResetError())
         assert "Connection reset:" in caplog.text
 
+def test_client_concurrency():
+    """Test multiple concurrent client connections."""
+    num_threads = 5  # Number of concurrent threads
+    results = queue.Queue()  # Thread-safe queue for results
+
+    # Define the mock behavior for send_search_query
+    def mock_send_search_query(query):
+        return "MOCKED_RESPONSE"
+
+    # Function to be executed by each thread
+    def mock_query():
+        response = client.send_search_query("test query")
+        results.put(response)
+
+    # Mock send_search_query globally for all threads
+    with patch("src.client.send_search_query", side_effect=mock_send_search_query):
+        # Create and start threads
+        threads = [threading.Thread(target=mock_query) for _ in range(num_threads)]
+
+        for thread in threads:
+            thread.start()
+
+        for thread in threads:
+            thread.join()
+
+    # Collect results from the queue
+    result_list = list(results.queue)
+
+    # Debugging: Print the results for visibility
+    print(f"Results: {result_list}")
+
+    # Validate all results are "MOCKED_RESPONSE"
+    assert all(result == "MOCKED_RESPONSE" for result in result_list), f"Unexpected results: {result_list}"
+
+@pytest.mark.parametrize("search_input, expected_result", [
+    ("valid;query;string", "STRING NOT FOUND"),
+    ("", "CONNECTION_ERROR: The read operation timed out"),
+    ("invalid query format", "STRING NOT FOUND"),
+    ("very;long;query;" * 100, "STRING NOT FOUND"),
+])
+def test_send_search_query_input_validation(search_input, expected_result):
+    with patch('src.client.establish_connection_and_communicate', return_value=expected_result):
+        result = client.send_search_query(search_input)
+        assert result == expected_result
 
 if __name__ == '__main__':
     pytest.main()

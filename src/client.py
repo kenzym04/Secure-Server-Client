@@ -120,6 +120,11 @@ def setup_logging() -> logging.Logger:
 
     os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 
+    # Ensure the log file exists
+    if not os.path.exists(LOG_FILE):
+        with open(LOG_FILE, 'w') as log_file:
+            log_file.write('')  # Create an empty log file if it doesn't exist
+
     file_handler = RotatingFileHandler(
         LOG_FILE, maxBytes=10*1024*1024,
         backupCount=5
@@ -219,6 +224,8 @@ def create_ssl_context() -> ssl.SSLContext:
         ssl.SSLContext: Configured SSL context.
     """
     context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    context.maximum_version = ssl.TLSVersion.TLSv1_3
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE  # Accept self-signed cert
     return context
@@ -230,19 +237,53 @@ def send_search_query(search_input: str) -> Optional[str]:
         search_input (str): The search query to send.
 
     Returns:
-        Optional[str]: The server's response, or None if the query failed.
+        Optional[str]: The server's response, or an appropriate error message if the query fails.
     """
     start_time = time.time()
     response = None
     try:
-        response = establish_connection_and_communicate(
-            search_input, start_time
-        )
+        # Establish connection and communicate with the server
+        sock = socket.create_connection((SERVER_IP, SERVER_PORT), timeout=10)
+        try:
+            if USE_SSL:
+                context = create_ssl_context()
+                with context.wrap_socket(sock, server_hostname=SERVER_IP) as secure_sock:
+                    secure_sock.sendall(search_input.encode('utf-8'))
+                    response = secure_sock.recv(1024).decode('utf-8').strip()
+            else:
+                sock.sendall(search_input.encode('utf-8'))
+                response = sock.recv(1024).decode('utf-8').strip()
+
+            # Handle empty responses
+            if not response:
+                logger.warning(f"Empty response received for query: '{search_input}'")
+                return "EMPTY_RESPONSE"
+        except socket.error as e:
+            logger.error(f"Socket error during communication: {str(e)}")
+            return f"CONNECTION_ERROR: {str(e)}"
+        finally:
+            sock.close()
+
+    except socket.timeout:
+        logger.error("Connection timed out while sending query.")
+        return "CONNECTION_ERROR: Connection timed out"
+    except ConnectionRefusedError:
+        logger.error("Connection refused by the server.")
+        return "CONNECTION_ERROR: Connection refused"
+    except ssl.SSLError as e:
+        logger.error(f"SSL error occurred: {str(e)}")
+        return f"CONNECTION_ERROR: {str(e)}"
     except Exception as error:
-        handle_connection_error(error)
+        # Handle unexpected errors
+        logger.error(f"Unexpected error: {str(error)}")
+        return "ERROR: Unexpected error"
     finally:
+        # Log the execution time
         if response is None:
             log_failed_query(search_input, start_time)
+        else:
+            execution_time = (time.time() - start_time) * 1000  # Convert to milliseconds
+            logger.info(f"Query '{search_input}' completed in {execution_time:.2f} ms.")
 
     return response
 
@@ -263,6 +304,7 @@ def establish_connection_and_communicate(
         ConnectionRefusedError: If the connection is refused.
         Exception: For any other unexpected errors.
     """
+    global sock
     try:
         sock = socket.create_connection((
             SERVER_IP, SERVER_PORT), timeout=10

@@ -1,12 +1,4 @@
 configparser~=7.1.0
-pytest~=8.3.4
-pip~=23.3
-timeout~=0.1.2
-iniconfig~=2.0.0
-py-cpuinfo~=9.0.0
-coverage~=7.6.9
-python-dateutil~=2.9.0.post0
-pyparsing~=3.2.0
-kiwisolver~=1.4.7
-pybloom_live~=4.0.0
+nanodb~=0.4.3
 psutil~=6.1.1
+pytest~=8.3.4

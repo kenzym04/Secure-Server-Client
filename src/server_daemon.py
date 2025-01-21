@@ -1,34 +1,16 @@
 """
-Daemon Module for Running Server
+Daemonize the current process to run in the background.
 
-This module provides functionalities to run the server as a daemon process.
-Key features include:
+Steps:
+1. Forks twice to detach from the terminal.
+2. Changes the working directory and sets umask.
+3. Writes the PID to a file.
+4. Redirects standard I/O to /dev/null.
+5. Configures signal handlers for termination.
 
-- Daemonization: Detach the process from the terminal to run in the background.
-- Logging: Configures rotating log files for capturing daemon activities.
-- Signal Handling: Ensures graceful shutdown on termination signals.
-- Server Lifecycle: Manages starting, stopping, and running the server.
-- Rate Limiting: Inherits request rate limiting from the main server module.
-
-Usage:
-    Start daemon: python server_daemon.py --daemon
-    Stop daemon:  python server_daemon.py stop
-"""
-"""
-Daemon Module for Running Server
-
-This module provides functionalities to run the server as a daemon process.
-Key features include:
-
-- Daemonization: Detach the process from the terminal to run in the background.
-- Logging: Configures rotating log files for capturing daemon activities.
-- Signal Handling: Ensures graceful shutdown on termination signals.
-- Server Lifecycle: Manages starting, stopping, and running the server.
-- Rate Limiting: Inherits request rate limiting from the main server module.
-
-Usage:
-    Start daemon: python server_daemon.py --daemon
-    Stop daemon:  python server_daemon.py stop
+Raises:
+    OSError: On fork failure.
+    IOError: On PID file write failure.
 """
 
 import os
@@ -41,69 +23,65 @@ import threading
 from typing import Any
 from logging.handlers import RotatingFileHandler
 
+# Logger setup
+logger = logging.getLogger('Server Daemon')
+
 # Add the project root directory to the Python path
 project_root = os.path.abspath(
-    os.path.join(os.path.dirname(__file__),
-                 '..')
-)
+    os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, project_root)
 
 try:
-    from .server import (start_server,
-                         stop_daemon,
-                         handle_client,
-                         search_query,
-                         TOKEN_BUCKET as rate_limiter
-                         )
+    from src.server import (
+        start_server,
+        stop_daemon,
+        search_query,
+        TOKEN_BUCKET as rate_limiter
+    )
 except ImportError:
-    from src.server import (start_server,
-                            stop_daemon,
-                            handle_client,
-                            search_query,
-                            TOKEN_BUCKET as rate_limiter
-                            )
+    raise ImportError("Failed to import server module.")
 
 # Constants
-SCRIPT_DIR: str = os.path.dirname(os.path.abspath(__file__))
-BASE_DIR: str = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
-
-# Global variables
-logger = logging.getLogger('Server Daemon')
-connection_count: int = 0
-connection_lock: threading.Lock = threading.Lock()
-
-# Dynamic Path Configuration
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 DEFAULT_CONFIG_DIR = os.getenv(
-    'CONFIG_DIR',
-    os.path.join(BASE_DIR,
-                 "config")
+    'CONFIG_DIR', os.path.join(BASE_DIR, "config"))
+DEFAULT_LOG_DIR = os.getenv(
+    'LOG_DIR', os.path.join(BASE_DIR, "logs")
 )
-DEFAULT_LOG_DIR = os.getenv('LOG_DIR', os.path.join(BASE_DIR, "logs"))
 DEFAULT_PID_DIR = os.getenv('PID_DIR', BASE_DIR)
 SERVER_HOST = os.getenv('SERVER_HOST', '127.0.0.1')
-SERVER_PORT = int(os.getenv('SERVER_PORT', 44444))
-
-# Paths
-PID_FILE: str = os.getenv(
+SERVER_PORT = os.getenv('SERVER_PORT')
+if SERVER_PORT is None:
+    SERVER_PORT = 44444
+    logger.info("SERVER_PORT not set; defaulting to 44444")
+SERVER_PORT = int(SERVER_PORT)
+PID_FILE = os.getenv(
     'PID_FILE',
     os.path.join(DEFAULT_PID_DIR,
                  "server_daemon.pid")
 )
-LOG_FILE: str = os.getenv(
+LOG_FILE = os.getenv(
     'LOG_FILE',
     os.path.join(DEFAULT_LOG_DIR,
                  "server_daemon.log")
 )
 
+# Global variables
+connection_count = 0
+connection_lock = threading.Lock()
+
+
 def validate_environment() -> None:
     """
     Validates critical directories and logs warnings for any missing paths.
     """
-    for path, description in [
+    paths_to_check = [
         (DEFAULT_CONFIG_DIR, "Configuration directory"),
         (DEFAULT_LOG_DIR, "Log directory"),
         (DEFAULT_PID_DIR, "PID directory"),
-    ]:
+    ]
+    for path, description in paths_to_check:
         if not os.path.exists(path):
             logger.warning(f"{description} does not exist: {path}")
 
@@ -112,51 +90,37 @@ def setup_logging() -> logging.Logger:
     Configure logging for the server daemon.
 
     Returns:
-        logging.Logger: Logger configured for file and console logging.
-
-    This includes:
-    - Rotating file handler with a maximum size and backups.
-    - Console handler for immediate logging during development.
+        logging.Logger: Configured logger.
     """
-    logger.handlers.clear()  # Clear any existing handlers
+    logger.handlers.clear()
 
-    # Ensure the directory for the log file exists
-    log_dir = os.path.dirname(LOG_FILE)
-    os.makedirs(log_dir, exist_ok=True)
+    os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 
     file_handler = RotatingFileHandler(
-        LOG_FILE, maxBytes=10*1024*1024,
-        backupCount=5)
+        LOG_FILE, maxBytes=10 * 1024 * 1024, backupCount=5)
     console_handler = logging.StreamHandler()
-
     formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     file_handler.setFormatter(formatter)
     console_handler.setFormatter(formatter)
 
     logger.setLevel(logging.DEBUG)
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
+
     logger.debug(f"Using LOG_FILE: {LOG_FILE}")
     logger.debug(f"Using PID_FILE: {PID_FILE}")
-
     return logger
 
 def signal_handler(signum: int, _: Any) -> None:
-    """Handles termination signals to shut down the server daemon.
+    """
+    Handles termination signals to shut down the server daemon.
 
     Args:
-        signum (int): The signal number received (e.g., 15 for SIGTERM).
-        _ (Any): Unused frame argument (convention for signal handlers).
-
-    This function logs the shutdown process and exits the program when the
-    daemon receives a termination signal (e.g., SIGTERM, SIGINT).
+        signum (int): Signal number (e.g., SIGTERM).
+        _ (Any): Unused frame argument.
     """
-    global logger
-    if logger is not None:
-        logger.info(f"Received signal {signum}. Shutting down...")
-        logger.info("Server daemon stopped.")
+    logger.info(f"Received signal {signum}. Shutting down...")
     sys.exit(0)
 
 # Helper function to redirect standard file descriptors
@@ -214,8 +178,12 @@ def daemonize() -> None:
             # Exit from second parent
             sys.exit(0)
     except OSError as e:
-        logger.error(f"Second fork failed: {e.errno} ({e.strerror})")
+        logger.error(
+            f"Second fork failed: {e.errno} ({e.strerror})"
+        )
         sys.exit(1)
+
+    redirect_standard_io()
 
     # Write PID file
     pid = os.getpid()
@@ -226,14 +194,8 @@ def daemonize() -> None:
     signal.signal(signal.SIGINT, signal_handler)
 
 def run_daemon() -> None:
-    """Run the server as a daemon process.
-
-    This function logs the start of the daemon process with its PID and
-    attempts to start the server using the start_server function. It handles
-    any exceptions that occur during server execution.
-
-    The function will run indefinitely until stopped if the server starts
-    successfully. If an exception occurs, it logs the error and exits.
+    """
+    Daemonize the current process.
     """
     pid = os.getpid()
     logger.info(f"Starting server in daemon mode | PID: {pid}")
@@ -278,10 +240,12 @@ def handle_request(client_socket: socket.socket) -> None:
                 result = search_query(data)
                 end_time = time.time()
                 query_time = end_time - start_time
-                logger.debug(f"DEBUG: Query: '{data}', "
-                             f"IP: {client_address[0]}:{client_address[1]}, "
-                             f"Time: {query_time:.6f}s, "
-                             f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+                logger.debug(
+                    f"DEBUG: Query: '{data}', "
+                    f"IP: {client_address[0]}:{client_address[1]}, "
+                    f"Time: {query_time:.6f}s, "
+                    f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}"
+                )
                 client_socket.send(result.encode('utf-8'))
             except Exception as e:
                 logger.error(
@@ -290,13 +254,14 @@ def handle_request(client_socket: socket.socket) -> None:
                     f": {str(e)}")
         else:
             logger.warning(
-                f"Rate limit exceeded, request from {client_address[0]}"
-                f":{client_address[1]} rejected")
+                f"Rate limit exceeded for {client_address[0]}:{client_address[1]}")
             client_socket.send(b"Rate limit exceeded. Please try again later.")
 
     with connection_lock:
         connection_count -= 1
-        logger.info(f"Connection closed. Total connections: {connection_count}")
+        logger.info(
+            f"Connection closed. Total connections: {connection_count}"
+        )
 
 
 def main() -> None:

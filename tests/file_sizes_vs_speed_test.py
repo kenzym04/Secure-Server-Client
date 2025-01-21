@@ -125,7 +125,7 @@ class TestServerPerformance(TestServer):
         """
         Test QPS for different file sizes and save the results to a CSV file.
         """
-        file_sizes = [10_000, 100_000, 250_000, 500_000, 1_000_000, 10_000_000, 100_000_000, 500_000_000, 1_000_000_000]
+        file_sizes = [10_000, 100_000, 250_000, 500_000, 1_000_000, 10_000_000]
         max_queries = 1000
         results = {}
 

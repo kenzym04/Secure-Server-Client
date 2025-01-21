@@ -38,16 +38,18 @@ Key Features:
 This module adheres to PEP8 and PEP20 standards, is fully statically typed, and includes comprehensive logging and exception handling to ensure maintainability, clarity, and high performance.
 """
 
-import configparser
-import logging
 import os
 import signal
 import socket
 import ssl
 import sys
-import threading
 import time
+import logging
+import threading
+import configparser
 from mmap import mmap as mmap_func
+server_running = threading.Event()
+server_running.set()
 from logging.handlers import RotatingFileHandler
 from typing import Set, Dict, Any, Tuple, Optional
 
@@ -73,13 +75,13 @@ connection_count = 0
 
 # File size and log constraints
 MAX_PAYLOAD_SIZE: int = 1024
-MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10 MB
-MAX_LOG_SIZE: int = 10 * 1024 * 1024  # 10 MB
+MAX_FILE_SIZE: int = 100 * 1024 * 1024  # 100 MB
+MAX_LOG_SIZE: int = 100 * 1024 * 1024  # 100 MB
 MAX_LOG_BACKUPS: int = 5
 
 # Rate limiting constants
-MAX_CLIENT_TOKENS: int = 10
-CLIENT_TOKEN_REFILL_RATE: float = 1.0  # 1 token per second
+MAX_CLIENT_TOKENS: int = 10000
+CLIENT_TOKEN_REFILL_RATE: float = 1000  # 1000 token per second
 
 # Global variables
 cached_file_contents: Set[str] = set()
@@ -148,7 +150,7 @@ class TokenBucket:
                 return True
             return False
 
-TOKEN_BUCKET = TokenBucket(capacity=100, fill_rate=10)  # 100 tokens, refills at 10 tokens/sec
+TOKEN_BUCKET = TokenBucket(capacity=10_000, fill_rate=1_000)  # 1000 tokens, refills at 1000 tokens/sec
 
 def setup_logging() -> None:
     """
@@ -173,6 +175,7 @@ def setup_logging() -> None:
         maxBytes=MAX_LOG_SIZE,
         backupCount=MAX_LOG_BACKUPS
     )
+    logger.debug(f"Log rotation size set to: {MAX_LOG_SIZE / (1024 * 1024):.2f} MB")
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)
     if not hasattr(file_handler, "filters"):
@@ -189,7 +192,6 @@ def setup_logging() -> None:
     logger.addHandler(console_handler)
     logger.debug(f"Using LOG_FILE: {LOG_FILE}")
     logger.debug(f"Using PID_FILE: {PID_FILE}")
-
 
 def load_config(config_path: str) -> configparser.ConfigParser:
     """
@@ -403,8 +405,7 @@ def initialize_set_mmap() -> None:
         raise
 
 def search_query(query: str) -> str:
-    """
-    Search for an exact match of the query in the file or cached data structures.
+    """Search for an exact match of the query in the file or cached data structures.
 
     Args:
         query (str): The string to search for.
@@ -414,44 +415,38 @@ def search_query(query: str) -> str:
     """
     global file_set, file_mmap
 
-    # Ensure initialization is outside of timing
-    if config['reread_on_query']:
-        if file_mmap is None:
-            initialize_set_mmap()
+    try:
+        if config['reread_on_query']:
+            # Dynamic search: re-read the file contents for each query
+            if file_mmap is None:
+                initialize_set_mmap()
+            if file_mmap is None:
+                logger.error("Failed to initialize memory-mapped file")
+                return "ERROR: Unable to read file"
 
-        if file_mmap is None:
-            logger.error("Failed to initialize memory-mapped file")
-            return "ERROR: Unable to initialize memory-mapped file"
-
-        try:
-            # Measure execution time only for the search operation
-            start_time = time.perf_counter_ns()
             file_content = file_mmap[:]
             file_lines = file_content.decode('utf-8').splitlines()
+            start_time = time.perf_counter_ns()
             result = "STRING EXISTS" if query in file_lines else "STRING NOT FOUND"
-            end_time = time.perf_counter_ns()
-        except Exception as e:
-            logger.error(f"Error reading file: {str(e)}")
-            return "ERROR: Unable to read file"
-    else:
-        if file_set is None:
-            initialize_set_mmap()
+        else:
+            # Static search: use cached file contents
+            if file_set is None:
+                initialize_set_mmap()
+            if file_set is None:
+                logger.error("Failed to initialize file set")
+                return "ERROR: Unable to initialize file set"
 
-        if file_set is None:
-            logger.error("Failed to initialize file set")
-            return "ERROR: Unable to initialize file set"
+            start_time = time.perf_counter_ns()
+            result = "STRING EXISTS" if query in file_set else "STRING NOT FOUND"
 
-        # Measure execution time only for the search operation
-        start_time = time.perf_counter_ns()
-        result = "STRING EXISTS" if query in file_set else "STRING NOT FOUND"
         end_time = time.perf_counter_ns()
+        execution_time_ms = (end_time - start_time) / 1_000_000  # Convert ns to ms
+        logger.info(f"Query processed. Result: {result}, Server Execution Time: {execution_time_ms:.6f} ms")
+        return result
 
-    execution_time_ms = (end_time - start_time) / 1_000_000  # Convert ns to ms
-
-    logger.info(f"Search query: {query} - {result} "
-                f"Server Execution Time: {execution_time_ms:.6f} ms")
-
-    return result
+    except Exception as e:
+        logger.error(f"Error reading file: {str(e)}")
+        return "ERROR: Unable to read file"
 
 cleanup_lock = threading.Lock()
 cleanup_done = False
@@ -499,21 +494,13 @@ def cleanup_resources() -> None:
         cleanup_done = True
         logger.info("Resources cleaned up successfully.")
 
-def handle_client(
-        client_socket: socket.socket, client_address: Tuple[str, int]) -> None:
+def handle_client(client_socket: socket.socket, client_address: tuple[str, int]) -> None:
     """
     Handle a client connection and process requests.
+
     Args:
         client_socket (socket.socket): The connected client socket.
         client_address (Tuple[str, int]): Client's IP address and port.
-    This function:
-    - Increments the global connection count.
-    - Receives and processes client queries.
-    - Sends responses back to the client.
-    - Logs query details and execution times.
-    - Handles exceptions and closes the connection.
-    - Decrements the connection count upon completion.
-    Affects global: connection_count
     """
     global connection_count
     with connection_count_lock:
@@ -528,70 +515,74 @@ def handle_client(
             try:
                 query = client_socket.recv(MAX_PAYLOAD_SIZE).decode('utf-8').strip()
                 if not query:
+                    if client_socket.fileno() == -1:  # Connection closed
+                        logger.warning(
+                            f"Client {client_address[0]}:{client_address[1]} closed the connection prematurely."
+                        )
                     break
-                # check for rate limiting
+
+                # Process valid query
+                result = search_query(query)
+                client_socket.sendall(result.encode('utf-8'))
+
+                # Check for rate limiting
                 if not TOKEN_BUCKET.consume(1):
+                    logger.debug(f"Rate limit exceeded for {client_address[0]}:{client_address[1]}")
                     client_socket.sendall("RATE_LIMITED\n".encode('utf-8'))
                     continue
 
                 start_time = time.perf_counter_ns()
                 result = search_query(query)
-                round_trip_time = (time.perf_counter_ns() - start_time) / 1_000_000  # Convert ns to ms = time.perf_counter_ns()
+                round_trip_time = (time.perf_counter_ns() - start_time) / 1_000_000  # Convert ns to ms
 
-                response = f"{result}\n"
-                client_socket.sendall(response.encode('utf-8'))
+                logger.info(f"Query processed. Result: {result}, Server Round-trip Execution Time: {round_trip_time:.6f} ms")
+                client_socket.sendall(result.encode('utf-8'))
 
-                logger.debug(
-                    f"Query: '{query}', "
-                    f"IP: {client_address[0]}:{client_address[1]}, "
-                    f"Server Round-trip Execution Time: {round_trip_time:.6f} ms"
-                )
-            except socket.error as e:
-                logger.error(f"Socket error while receiving data: {str(e)}")
-                break
             except UnicodeDecodeError as e:
-                logger.error(f"Error decoding received data: {str(e)}")
+                logger.error(f"Error decoding received data from {client_address[0]}:{client_address[1]}: {str(e)}")
                 continue
+            except ssl.SSLError as e:
+                if "EOF occurred in violation of protocol" in str(e):
+                    logger.info(
+                        f"Client {client_address[0]}:{client_address[1]} disconnected abruptly (SSL error)."
+                    )
+                    break
+                logger.error(f"SSL error while receiving data: {str(e)}")
+                break
+            except Exception as e:
+                logger.error(f"Error handling client {client_address}: {str(e)}")
+                break
     except Exception as e:
         logger.error(f"Error handling client {client_address}: {str(e)}")
     finally:
         client_socket.close()
         with connection_count_lock:
             connection_count -= 1
-        logger.debug(
-            f"Connection from "
-            f"{client_address[0]}:{client_address[1]} closed. "
-            f"Total connections: {connection_count}")
+
+def signal_handler(signum: int, _: Any) -> None:
+    """
+    Handle termination signals gracefully.
+    """
+    logger.info(f"Received signal {signum} to terminate. Initiating shutdown...")
+    server_running.clear()  # Signal all threads to stop
+    cleanup_resources()
+    logger.info("Server shutting down...")
+    sys.exit(0)
 
 def start_server(daemon_logger: Optional[logging.Logger] = None) -> None:
-    """
-    Initialize and run the server, handling client connections.
-
-    Args:
-        daemon_logger: Optional logger for daemon mode. If None, sets up a new logger.
-
-    This function:
-    - Sets up logging and initializes resources.
-    - Configures signal handlers for graceful shutdown.
-    - Creates and binds the server socket.
-    - Enters a loop to accept and handle client connections in separate threads.
-    - Performs cleanup on exit.
-
-    Raises:
-        Logs any exceptions occurring in the main server loop.
-    """
     global logger
     if daemon_logger:
         logger = daemon_logger
     else:
         setup_logging()
 
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGINT, signal_handler)
+    # Move signal handling to the main thread
+    if threading.current_thread() is threading.main_thread():
+        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGINT, signal_handler)
 
     server_socket = setup_server_socket(config['host'],
-                                        config['port'], config['ssl']
-                                        )
+                                        config['port'], config['ssl'])
     logger.info(f"Server started on {config['host']}:{config['port']}")
     logger.info(f"Using file: {config['linuxpath']}")
     logger.info(f"Reread on query: {config['reread_on_query']}")
@@ -604,20 +595,46 @@ def start_server(daemon_logger: Optional[logging.Logger] = None) -> None:
                 args=(client_socket, client_address)
             )
             client_thread.start()
+    except ssl.SSLError as e:
+        if "UNEXPECTED_EOF_WHILE_READING" in str(e):
+            logger.info("Client disconnected abruptly. SSL error suppressed.")
+        else:
+            logger.error(f"SSL error in main server loop: {e}")
     except Exception as e:
         logger.error(f"Error in main server loop: {str(e)}")
     finally:
         cleanup_resources()
         server_socket.close()
-        logger.info("Server shutting down.")
+        logger.info("Server shutting down complete.")
 
 def create_ssl_context() -> ssl.SSLContext:
-    cert_file = os.getenv('SSL_CERT_FILE', os.path.join(DEFAULT_CERT_DIR, "server.crt"))
-    key_file = os.getenv('SSL_KEY_FILE', os.path.join(DEFAULT_CERT_DIR, "server.key"))
+    """
+    Create and return an SSL context.
 
-    context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-    context.load_cert_chain(certfile=cert_file, keyfile=key_file)
-    return context
+    Returns:
+        ssl.SSLContext: Configured SSL context.
+    """
+    try:
+        cert_file = os.getenv('SSL_CERT_FILE', os.path.join(DEFAULT_CERT_DIR, "server.crt"))
+        key_file = os.getenv('SSL_KEY_FILE', os.path.join(DEFAULT_CERT_DIR, "server.key"))
+
+        context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        context.load_cert_chain(certfile=cert_file, keyfile=key_file)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context.maximum_version = ssl.TLSVersion.TLSv1_3
+
+        # Set SSL/TLS version restrictions
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context.maximum_version = ssl.TLSVersion.TLSv1_3
+
+        logger.info(f"SSL context created successfully. Cert file: {cert_file}, Key file: {key_file}")
+        return context
+    except FileNotFoundError as e:
+        logger.error(f"SSL certificate or key file not found: {e}")
+        raise
+    except ssl.SSLError as e:
+        logger.error(f"Error creating SSL context: {e}")
+        raise
 
 def setup_server_socket(ip: str, port: int, use_ssl: bool) -> socket.socket:
     """
@@ -631,25 +648,24 @@ def setup_server_socket(ip: str, port: int, use_ssl: bool) -> socket.socket:
     Returns:
         socket.socket: Configured server socket.
     """
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server_socket.bind((ip, port))
-    server_socket.listen(5)
+    try:
+        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server_socket.bind((ip, port))
+        server_socket.listen(5)
 
-    if use_ssl:
-        context = create_ssl_context()
-        server_socket = context.wrap_socket(server_socket, server_side=True)
+        if use_ssl:
+            context = create_ssl_context()
+            server_socket = context.wrap_socket(server_socket, server_side=True)
+            logger.info("Server socket wrapped with SSL successfully.")
 
-    return server_socket
-
-def signal_handler(signum: int, _: Any) -> None:
-    """
-    Handle termination signals gracefully.
-    """
-    logger.info(f"Received signal {signum} to terminate. Shutting down...")
-    cleanup_resources()
-    logger.info("Server shutdown complete.")
-    sys.exit(0)
+        return server_socket
+    except ssl.SSLError as e:
+        logger.error(f"SSL error during server socket setup: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during server socket setup: {e}")
+        raise
 
 def stop_daemon() -> None:
     global logger
@@ -677,4 +693,6 @@ def stop_daemon() -> None:
         logger.error(f"Error stopping daemon: {str(e)}")
 
 if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
     start_server()
