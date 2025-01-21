@@ -8,7 +8,7 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import socket
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 import psutil
 import pytest
 
