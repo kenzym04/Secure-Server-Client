@@ -1,4 +1,4 @@
-# Server Application
+# Secure Server Client Application
 
 This is a Python server application that handles client connections and responds to search queries against a preloaded text file. It can run as a regular process or as a Linux daemon for background execution.
 
